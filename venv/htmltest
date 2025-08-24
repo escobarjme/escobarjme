@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Telecentro Streaming</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Segoe UI', Arial, sans-serif;
+    }
+    
+    body {
+      background-color: #0a1725;
+      color: white;
+      display: flex;
+      min-height: 100vh;
+    }
+    
+    .container {
+      display: flex;
+      width: 100%;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    .login-panel {
+      background-color: #0d2241;
+      color: white;
+      flex: 1;
+      padding: 40px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      position: relative;
+    }
+    
+    .promo-panel {
+      flex: 1;
+      background-color: #0a1725;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+    
+    .promo-content {
+      position: relative;
+      z-index: 2;
+      text-align: center;
+      padding: 20px;
+    }
+    
+    .circle-bg {
+      position: absolute;
+      width: 400px;
+      height: 400px;
+      border-radius: 50%;
+      background-color: #e4004e;
+      z-index: 1;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+    
+    .login-form {
+      width: 100%;
+      max-width: 350px;
+      margin: 0 auto;
+    }
+    
+    .form-group {
+      margin-bottom: 20px;
+      position: relative;
+    }
+    
+    .form-group input {
+      width: 100%;
+      padding: 12px 15px;
+      border: none;
+      background-color: #1a3254;
+      border-radius: 4px;
+      color: white;
+      font-size: 14px;
+    }
+    
+    .form-group input::placeholder {
+      color: #7b8ca6;
+    }
+    
+    .form-group .toggle-password {
+      position: absolute;
+      right: 15px;
+      top: 50%;
+      transform: translateY(-50%);
+      cursor: pointer;
+      color: #7b8ca6;
+    }
+    
+    .login-button {
+      width: 100%;
+      padding: 12px;
+      background-color: #0092ff;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+    
+    .login-button:hover {
+      background-color: #007ad9;
+    }
+    
+    .forgot-password {
+      margin-top: 15px;
+      text-align: left;
+    }
+    
+    .forgot-password a, .signup a {
+      color: #4a90e2;
+      text-decoration: none;
+    }
+    
+    .signup {
+      margin-top: 30px;
+      margin-bottom: 10px;
+    }
+    
+    .help-link {
+      margin-top: 10px;
+    }
+    
+    .help-link a {
+      color: #4a90e2;
+      text-decoration: none;
+    }
+    
+    .signup-button {
+      display: inline-block;
+      padding: 10px 15px;
+      background-color: transparent;
+      border: 2px solid #e0e0e0;
+      border-radius: 4px;
+      color: #e0e0e0;
+      text-decoration: none;
+      margin-top: 5px;
+      transition: all 0.3s;
+    }
+    
+    .signup-button:hover {
+      background-color: rgba(255, 255, 255, 0.1);
+    }
+    
+    .terms {
+      position: absolute;
+      bottom: 20px;
+      left: 40px;
+      font-size: 12px;
+      color: #7b8ca6;
+    }
+    
+    .terms a {
+      color: #4a90e2;
+      text-decoration: none;
+    }
+    
+    .logo {
+      margin-bottom: 40px;
+      font-size: 24px;
+      font-weight: bold;
+    }
+    
+    @media (max-width: 768px) {
+      .container {
+        flex-direction: column;
+      }
+      
+      .login-panel, .promo-panel {
+        flex: none;
+        width: 100%;
+      }
+      
+      .login-panel {
+        padding: 30px 20px;
+        min-height: 500px;
+      }
+      
+      .promo-panel {
+        min-height: 400px;
+      }
+      
+      .terms {
+        position: relative;
+        left: 0;
+        bottom: 0;
+        margin-top: 30px;
+      }
+    }
+    
+    .promo-title {
+      font-size: 48px;
+      margin-bottom: 15px;
+      font-weight: bold;
+      color: #fff;
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+    }
+    
+    .promo-subtitle {
+      font-size: 20px;
+      color: #fff;
+      margin-bottom: 30px;
+      text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5);
+    }
+    
+    .promo-button {
+      display: inline-block;
+      padding: 12px 30px;
+      background-color: #fff;
+      color: #e4004e;
+      text-decoration: none;
+      font-weight: bold;
+      border-radius: 30px;
+      font-size: 16px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+      transition: all 0.3s;
+    }
+    
+    .promo-button:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 6px 15px rgba(0, 0, 0, 0.25);
+    }
+    
+    .promo-image {
+      width: 80%;
+      max-width: 450px;
+      margin-bottom: 20px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .status-message {
+      margin-top: 15px;
+      padding: 10px;
+      border-radius: 4px;
+      text-align: center;
+      display: none;
+    }
+
+    .status-success {
+      background-color: rgba(40, 167, 69, 0.2);
+      color: #28a745;
+    }
+
+    .status-error {
+      background-color: rgba(220, 53, 69, 0.2);
+      color: #dc3545;
+    }
+
+    .loading-spinner {
+      display: none;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,.3);
+      border-radius: 50%;
+      border-top-color: #fff;
+      animation: spin 1s ease-in-out infinite;
+      margin-right: 8px;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    .button-content {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    /* Dashboard styles */
+    .dashboard {
+      display: none;
+      width: 100%;
+      background-color: #0a1725;
+      color: white;
+      min-height: 100vh;
+    }
+    
+    .header {
+      background-color: #0d2241;
+      padding: 15px 30px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .main-content {
+      padding: 30px;
+    }
+    
+    .nav-menu {
+      width: 100px;
+      background-color: #0d2241;
+      min-height: calc(100vh - 70px);
+      padding: 20px 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    
+    .nav-item {
+      margin-bottom: 30px;
+      color: #7b8ca6;
+      text-decoration: none;
+      font-size: 12px;
+      text-align: center;
+      cursor: pointer;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    
+    .nav-item:hover, .nav-item.active {
+      color: white;
+    }
+    
+    .nav-icon {
+      font-size: 22px;
+      margin-bottom: 5px;
+    }
+    
+    .hero-banner {
+      width: 100%;
+      height: 300px;
+      border-radius: 10px;
+      overflow: hidden;
+      position: relative;
+      margin-bottom: 30px;
+    }
+    
+    .hero-banner img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    
+    .slider-controls {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 10px;
+    }
+    
+    .slider-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background-color: rgba(255,255,255,0.5);
+      cursor: pointer;
+    }
+    
+    .slider-dot.active {
+      background-color: white;
+    }
+    
+    .content-section {
+      margin-bottom: 40px;
+    }
+    
+    .content-section h2 {
+      margin-bottom: 15px;
+      font-size: 24px;
+    }
+    
+    .channel-row {
+      display: flex;
+      overflow-x: auto;
+      gap: 15px;
+      padding: 10px 0;
+    }
+    
+    .channel-card {
+      min-width: 280px;
+      border-radius: 8px;
+      overflow: hidden;
+      background-color: #0d2241;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    
+    .channel-card img {
+      width: 100%;
+      height: 160px;
+      object-fit: cover;
+    }
+    
+    .channel-info {
+      padding: 15px;
+    }
+    
+    .channel-title {
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+    
+    .channel-time {
+      color: #7b8ca6;
+      font-size: 14px;
+    }
+    
+    .progress-bar {
+      height: 4px;
+      background-color: #1a3254;
+      width: 100%;
+      position: relative;
+      margin-top: 10px;
+    }
+    
+    .progress {
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 100%;
+      background-color: #0092ff;
+    }
+    
+    .dashboard-container {
+      display: flex;
+    }
+    
+    .main-area {
+      flex: 1;
+    }
+    
+    .logo-small {
+      font-size: 22px;
+      font-weight: bold;
+    }
+    
+    .user-menu {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    
+    .time {
+      font-size: 18px;
+    }
+    
+    .user-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background-color: #1a3254;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    
+    .api-call-log {
+      position: fixed;
+      bottom: 0;
+      right: 0;
+      width: 400px;
+      max-height: 200px;
+      overflow-y: auto;
+      background-color: rgba(0, 0, 0, 0.8);
+      border-top-left-radius: 8px;
+      padding: 10px;
+      font-family: monospace;
+      font-size: 12px;
+      z-index: 1000;
+      display: none;
+    }
+    
+    .api-call {
+      margin-bottom: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #333;
+    }
+    
+    .api-call.success {
+      color: #28a745;
+    }
+    
+    .api-call .endpoint {
+      color: #0092ff;
+    }
+    
+    .debug-toggle {
+      position: fixed;
+      bottom: 10px;
+      right: 10px;
+      background-color: #1a3254;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 5px 10px;
+      cursor: pointer;
+      z-index: 1001;
+    }
+  </style>
+</head>
+<body>
+  <!-- Login Section -->
+  <div class="container" id="loginContainer">
+    <div class="login-panel">
+      <div class="login-form">
+        <div class="logo">Telecentro</div>
+        <form id="loginForm">
+          <div class="form-group">
+            <input type="email" placeholder="E-mail de Sucursal Virtual" id="email" name="email" required>
+          </div>
+          <div class="form-group">
+            <input type="password" placeholder="Contraseña de Sucursal Virtual" id="password" name="password" required>
+            <span class="toggle-password">👁️</span>
+          </div>
+          <button type="submit" class="login-button">
+            <div class="button-content">
+              <span class="loading-spinner" id="loginSpinner"></span>
+              <span class="button-text">Continuar</span>
+            </div>
+          </button>
+        </form>
+
+        <div id="statusMessage" class="status-message"></div>
+        
+        <div class="forgot-password">
+          <a href="#">Olvidé mi contraseña</a>
+        </div>
+        <div class="signup">
+          <span>¿No tenés usuario?</span><br>
+          <a href="#" class="signup-button">Crealo ahora</a>
+        </div>
+        <div class="help-link">
+          <a href="#">Necesito ayuda</a>
+        </div>
+      </div>
+      <div class="terms">
+        © 2025 Telecentro. Todos los derechos reservados. Al ingresar aceptas nuestros
+        <a href="#">Términos y Condiciones</a> y la <a href="#">Política de privacidad</a>
+      </div>
+    </div>
+    
+    <div class="promo-panel">
+      <div class="circle-bg"></div>
+      <div class="promo-content">
+        <div class="promo-image">
+          <img src="/api/placeholder/450/250" alt="HBO Twisted Metal">
+        </div>
+        <h1 class="promo-title">Twisted Metal</h1>
+        <p class="promo-subtitle">Nuevo en HBO</p>
+        <a href="#" class="promo-button">Ver ahora</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dashboard Section -->
+  <div class="dashboard" id="dashboardContainer">
+    <div class="header">
+      <div class="logo-small">Telecentro</div>
+      <div class="user-menu">
+        <div class="time" id="currentTime">20:02</div>
+        <div class="user-icon" id="logoutButton">👤</div>
+      </div>
+    </div>
+    
+    <div class="dashboard-container">
+      <div class="nav-menu">
+        <a class="nav-item active">
+          <div class="nav-icon">🏠</div>
+          <span>Inicio</span>
+        </a>
+        <a class="nav-item">
+          <div class="nav-icon">📺</div>
+          <span>TV</span>
+        </a>
+        <a class="nav-item">
+          <div class="nav-icon">⏱️</div>
+          <span>Últimas 24h</span>
+        </a>
+        <a class="nav-item">
+          <div class="nav-icon">📋</div>
+          <span>Guía</span>
+        </a>
+        <a class="nav-item">
+          <div class="nav-icon">🎬</div>
+          <span>Películas</span>
+        </a>
+        <a class="nav-item">
+          <div class="nav-icon">📱</div>
+          <span>Series</span>
+        </a>
+        <a class="nav-item">
+          <div class="nav-icon">⚙️</div>
+          <span>Ajustes</span>
+        </a>
+      </div>
+      
+      <div class="main-area">
+        <div class="main-content">
+          <div class="hero-banner">
+            <img src="/api/placeholder/1200/300" alt="The Last of Us">
+            <div class="slider-controls">
+              <div class="slider-dot active"></div>
+              <div class="slider-dot"></div>
+              <div class="slider-dot"></div>
+              <div class="slider-dot"></div>
+              <div class="slider-dot"></div>
+            </div>
+          </div>
+          
+          <div class="content-section">
+            <h2>TV en vivo</h2>
+            <div class="channel-row">
+              <div class="channel-card">
+                <img src="/api/placeholder/280/160" alt="Canal 12">
+                <div class="channel-info">
+                  <div class="channel-title">El chico de oro</div>
+                  <div class="channel-time">Hoy de 19:00 a 20:00 hs.</div>
+                  <div class="progress-bar">
+                    <div class="progress" style="width: 75%;"></div>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="channel-card">
+                <img src="/api/placeholder/280/160" alt="Canal 14">
+                <div class="channel-info">
+                  <div class="channel-title">Los 8 escalones</div>
+                  <div class="channel-time">Hoy de 18:30 a 20:00 hs.</div>
+                  <div class="progress-bar">
+                    <div class="progress" style="width: 85%;"></div>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="channel-card">
+                <img src="/api/placeholder/280/160" alt="Canal 13">
+                <div class="channel-info">
+                  <div class="channel-title">26 PM</div>
+                  <div class="channel-time">Hoy de 17:00 a 20:00 hs.</div>
+                  <div class="progress-bar">
+                    <div class="progress" style="width: 90%;"></div>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="channel-card">
+                <img src="/api/placeholder/280/160" alt="Canal 15">
+                <div class="channel-info">
+                  <div class="channel-title">Sálvese quien pueda</div>
+                  <div class="channel-time">Hoy de 19:00 a 20:00 hs.</div>
+                  <div class="progress-bar">
+                    <div class="progress" style="width: 70%;"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="content-section">
+            <h2>Las películas que te recomendamos</h2>
+            <div class="channel-row">
+              <div class="channel-card">
+                <img src="/api/placeholder/280/160" alt="Película 1">
+                <div class="channel-info">
+                  <div class="channel-title">Oppenheimer</div>
+                  <div class="channel-time">Drama | 2023</div>
+                </div>
+              </div>
+              
+              <div class="channel-card">
+                <img src="/api/placeholder/280/160" alt="Película 2">
+                <div class="channel-info">
+                  <div class="channel-title">Dune: Parte Dos</div>
+                  <div class="channel-time">Sci-Fi | 2024</div>
+                </div>
+              </div>
+              
+              <div class="channel-card">
+                <img src="/api/placeholder/280/160" alt="Película 3">
+                <div class="channel-info">
+                  <div class="channel-title">Gladiador II</div>
+                  <div class="channel-time">Acción | 2024</div>
+                </div>
+              </div>
+              
+              <div class="channel-card">
+                <img src="/api/placeholder/280/160" alt="Película 4">
+                <div class="channel-info">
+                  <div class="channel-title">Furiosa</div>
+                  <div class="channel-time">Acción | 2024</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- API Call Log for debugging -->
+  <button class="debug-toggle" id="debugToggle">Debug</button>
+  <div class="api-call-log" id="apiCallLog"></div>
+
+  <script>
+    // Generate a random device ID for simulation purposes
+    function generateDeviceId() {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    }
+
+    // Password visibility toggle
+    document.querySelector('.toggle-password').addEventListener('click', function() {
+      const passwordInput = document.getElementById('password');
+      if(passwordInput.type === 'password') {
+        passwordInput.type = 'text';
+        this.textContent = '👁️‍🗨️';
+      } else {
+        passwordInput.type = 'password';
+        this.textContent = '👁️';
+      }
+    });
+
+    // Debug toggle
+    document.getElementById('debugToggle').addEventListener('click', function() {
+      const apiCallLog = document.getElementById('apiCallLog');
+      if(apiCallLog.style.display === 'none' || apiCallLog.style.display === '') {
+        apiCallLog.style.display = 'block';
+      } else {
+        apiCallLog.style.display = 'none';
+      }
+    });
+
+    // Global variables
+    const deviceId = generateDeviceId();
+    let authToken = null;
+
+    // Log API calls
+    function logApiCall(endpoint, method, success = true) {
+      const apiCallLog = document.getElementById('apiCallLog');
+      const apiCall = document.createElement('div');
+      apiCall.className = `api-call ${success ? 'success' : 'error'}`;
+      apiCall.innerHTML = `[${new Date().toLocaleTimeString()}] ${method} <span class="endpoint">${endpoint}</span> - ${success ? 'OK' : 'FAILED'}`;
+      apiCallLog.appendChild(apiCall);
+      apiCallLog.scrollTop = apiCallLog.scrollHeight;
+    }
+
+    // Simulated API calls
+    function simulateApiCall(endpoint, method, data = null, success = true, delay = 500) {
+      return new Promise((resolve, reject) => {
+        setTimeout(() => {
+          logApiCall(endpoint, method, success);
+          if (success) {
+            resolve({ status: 200, data: data || { success: true } });
+          } else {
+            reject({ status: 401, message: 'Unauthorized' });
+          }
+        }, delay);
+      });
+    }
+
+    // Login handler
+    document.getElementById('loginForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      const statusMessage = document.getElementById('statusMessage');
+      const loginButton = document.querySelector('.login-button');
+      const spinner = document.getElementById('loginSpinner');
+      const buttonText = document.querySelector('.button-text');
+      
+      // Show loading state
+      spinner.style.display = 'inline-block';
+      buttonText.textContent = 'Autenticando...';
+      loginButton.disabled = true;
+      
+      // Hide any previous status messages
+      statusMessage.style.display = 'none';
+      statusMessage.className = 'status-message';
+      
+      // Simulate login API call
+      simulateApiCall('/proxy/login', 'POST', { email, password, deviceId }, true, 1500)
+        .then(response => {
+          // Simulate getting auth token
+          authToken = 'eyJraWQiOiI2OTJkODI4MS1hZTBmLTRkZDgtYmI4OC1iMjM3MDNiZTY0MmEiLCJhbGciOiJSUzI1NiJ9...';
+          
+          // Perform subsequent API calls in sequence
+          return simulateApiCall('/proxy/casAuth', 'POST', { deviceId }, true, 500);
+        })
+        .then(() => {
+          return simulateApiCall('/proxy/accountDetails', 'POST', {}, true, 300);
+        })
+        .then(() => {
+          return simulateApiCall('/proxy/listChannels', 'POST', { languageId: 'spa' }, true, 600);
+        })
+        .then(() => {
+          return simulateApiCall('/static/ncf/top20.json', 'GET', {}, true, 200);
+        })
+        .then(() => {
+          // All API calls successful, show dashboard
+          document.getElementById('loginContainer').style.display = 'none';
+          document.getElementById('dashboardContainer').style.display = 'block';
+          
+          // Update time display
+          updateTime();
+          setInterval(updateTime, 60000);
+        })
+        .catch(error => {
+          // Show error message
+          statusMessage.textContent = 'Error de autenticación. Por favor verifique sus credenciales.';
+          statusMessage.style.display = 'block';
+          statusMessage.classList.add('status-error');
+          
+          // Reset button state
+          spinner.style.display = 'none';
+          buttonText.textContent = 'Continuar';
+          loginButton.disabled = false;
+        });
+    });
+
+    // Logout handler
+    document.getElementById('logoutButton').addEventListener('click', function() {
+      document.getElementById('loginContainer').style.display = 'flex';
+      document.getElementById('dashboardContainer').style.display = 'none';
+      document.getElementById('email').value = '';
+      document.getElementById('password').value = '';
+      
+      // Reset form state
+      const spinner = document.getElementById('loginSpinner');
+      const buttonText = document.querySelector('.button-text');
+      const loginButton = document.querySelector('.login-button');
+      
+      spinner.style.display = 'none';
+      buttonText.textContent = 'Continuar';
+      loginButton.disabled = false;
+      
+      document.getElementById('statusMessage').style.display = 'none';
+      
+      // Clear auth token
+      authToken = null;
+    });
+
+    // Update time display
+    function updateTime() {
+      const now = new Date();
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      document.getElementById('currentTime').textContent = `${hours}:${minutes}`;
+    }
+  </script>
+</body>
+</html>
