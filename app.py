@@ -35,6 +35,7 @@ def get_auth_url():
         f"?response_type=code"
         f"&client_id={CLIENT_ID}"
         f"&redirect_uri={REDIRECT_URI}"
+        f"&state=railway_{os.urandom(8).hex()}"
     )
 
 def exchange_code_for_token(code: str) -> str | None:
