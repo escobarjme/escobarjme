@@ -67,8 +67,6 @@ def get_auth_url():
     )
 
 
-def exchange_code_for_token(code: str) -> str | None:
-
 def exchange_code_for_token(code: str):
 
     payload = {
@@ -80,9 +78,6 @@ def exchange_code_for_token(code: str):
 
     }
 
-    r = requests.post(TOKEN_URL, data=payload, timeout=10_
-
-    }
     r = requests.post(TOKEN_URL, data=payload, timeout=10)
     if r.status_code != 200:
         st.error("❌ Error al obtener access_token")
