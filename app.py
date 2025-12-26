@@ -3,24 +3,25 @@ import requests
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from datetime import datetime
 
 # =====================
-# Variables de entorno
+# Configuración
 # =====================
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 REDIRECT_URI = os.getenv("REDIRECT_URI")
-SITE_ID = "MLA"
-st.write("SITE_ID:", SITE_ID)
+
+SITE_ID = "MLA"  # MercadoLibre Argentina
 
 if not CLIENT_ID or not CLIENT_SECRET or not REDIRECT_URI:
-    st.error("❌ Faltan variables de entorno: CLIENT_ID / CLIENT_SECRET / REDIRECT_URI")
+    st.error("❌ Faltan variables de entorno (CLIENT_ID / CLIENT_SECRET / REDIRECT_URI)")
     st.stop()
 
-# =====================
-# URLs Mercado Libre
-# =====================
+HEADERS = {
+    "User-Agent": "Mozilla/5.0",
+    "Accept": "application/json",
+}
+
 AUTH_URL = "https://auth.mercadolibre.com.ar/authorization"
 TOKEN_URL = "https://api.mercadolibre.com/oauth/token"
 
@@ -31,7 +32,7 @@ st.session_state.setdefault("access_token", None)
 st.session_state.setdefault("data", [])
 
 # =====================
-# OAuth helpers
+# OAuth
 # =====================
 def get_auth_url():
     return (
@@ -41,7 +42,7 @@ def get_auth_url():
         f"&state=railway"
     )
 
-def exchange_code_for_token(code: str):
+def exchange_code_for_token(code):
     payload = {
         "grant_type": "authorization_code",
         "client_id": CLIENT_ID,
@@ -49,105 +50,92 @@ def exchange_code_for_token(code: str):
         "code": code,
         "redirect_uri": REDIRECT_URI,
     }
+
     r = requests.post(TOKEN_URL, data=payload, timeout=10)
+
     if r.status_code != 200:
-        st.error("❌ Error OAuth")
-        st.code(r.text)
+        st.error("❌ Error obteniendo token")
+        st.text(r.text)
         return None
+
     return r.json().get("access_token")
 
 # =====================
-# Mercado Libre API
+# MercadoLibre API
 # =====================
 @st.cache_data(ttl=86400)
 def get_categories():
     url = f"https://api.mercadolibre.com/sites/{SITE_ID}/categories"
-    r = requests.get(url, timeout=10)
-    if r.status_code != 200:
+
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=10)
+
+        if r.status_code != 200:
+            return []
+
+        data = r.json()
+        return data if isinstance(data, list) else []
+
+    except Exception:
         return []
-    return r.json()
 
 @st.cache_data(ttl=3600)
 def get_best_sellers(token, category_id):
     url = f"https://api.mercadolibre.com/highlights/{SITE_ID}/category/{category_id}"
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = {**HEADERS, "Authorization": f"Bearer {token}"}
+
     r = requests.get(url, headers=headers, timeout=10)
+
     if r.status_code != 200:
         return []
+
     return r.json().get("content", [])
 
 def get_item(token, item_id):
     url = f"https://api.mercadolibre.com/items/{item_id}"
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = {**HEADERS, "Authorization": f"Bearer {token}"}
+
     r = requests.get(url, headers=headers, timeout=10)
-    if r.status_code != 200:
-        return None
-    return r.json()
+    return r.json() if r.status_code == 200 else None
 
 def get_item_visits(token, item_id):
     url = f"https://api.mercadolibre.com/items/{item_id}/visits/time_window"
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = {**HEADERS, "Authorization": f"Bearer {token}"}
     params = {"last": 30, "unit": "day"}
+
     r = requests.get(url, headers=headers, params=params, timeout=10)
-    return r.json().get("total_visits", "N/A")
+    return r.json().get("total_visits", 0) if r.status_code == 200 else 0
 
 def get_item_rating(token, item_id):
     url = f"https://api.mercadolibre.com/reviews/item/{item_id}"
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = {**HEADERS, "Authorization": f"Bearer {token}"}
+
     r = requests.get(url, headers=headers, timeout=10)
+
     if r.status_code != 200:
-        return "N/A", {}
+        return None
+
     data = r.json()
-    return data.get("rating_average", "N/A"), data.get("rating_levels", {})
-
-def get_seller_reputation(token, seller_id):
-    url = f"https://api.mercadolibre.com/users/{seller_id}"
-    headers = {"Authorization": f"Bearer {token}"}
-    r = requests.get(url, headers=headers, timeout=10)
-    if r.status_code != 200:
-        return {}
-    rep = r.json().get("seller_reputation", {})
-    tx = rep.get("transactions", {})
-    return {
-        "nivel": rep.get("level_id", "N/A"),
-        "power": rep.get("power_seller_status", "N/A"),
-        "total": tx.get("total", "N/A"),
-    }
-
-def format_rating_levels(levels):
-    return (
-        f"⭐ {levels.get('one_star',0)} | "
-        f"⭐⭐ {levels.get('two_star',0)} | "
-        f"⭐⭐⭐ {levels.get('three_star',0)} | "
-        f"⭐⭐⭐⭐ {levels.get('four_star',0)} | "
-        f"⭐⭐⭐⭐⭐ {levels.get('five_star',0)}"
-    )
+    return data.get("rating_average")
 
 def fetch_product_data(token, item, position):
-    rating, levels = get_item_rating(token, item["id"])
-    seller = get_seller_reputation(token, item["seller_id"])
     return {
         "Posición": position,
-        "Título": item.get("title"),
-        "Precio": item.get("price"),
-        "Ventas": item.get("sold_quantity"),
+        "Título": item["title"],
+        "Precio": item["price"],
+        "Ventas": item.get("sold_quantity", 0),
         "Visitas 30d": get_item_visits(token, item["id"]),
-        "Rating": rating,
-        "Distribución Rating": format_rating_levels(levels),
-        "Nivel Vendedor": seller.get("nivel"),
-        "Power Seller": seller.get("power"),
-        "Link": item.get("permalink"),
+        "Rating": get_item_rating(token, item["id"]),
+        "Link": item["permalink"],
     }
 
 # =====================
 # UI
 # =====================
-st.set_page_config("MercadoLibre Explorer", "🛒", layout="wide")
-st.title("🛒 MercadoLibre Argentina – Más Vendidos")
+st.set_page_config("MercadoLibre Argentina – Más Vendidos", "🛒", layout="wide")
+st.title("🛒 MercadoLibre Argentina – Productos Más Vendidos")
 
-# =====================
 # OAuth callback
-# =====================
 params = st.query_params
 if "code" in params and not st.session_state["access_token"]:
     token = exchange_code_for_token(params["code"])
@@ -163,40 +151,31 @@ if not st.session_state["access_token"]:
 token = st.session_state["access_token"]
 
 # =====================
-# Sidebar – categorías
+# Sidebar
 # =====================
 categories = get_categories()
 
-cat_map = {
-    c["name"]: c["id"]
-    for c in categories
-    if isinstance(c, dict) and "id" in c and "name" in c
-}
-
-if not cat_map:
+if not categories:
     st.error("❌ No se pudieron cargar las categorías")
     st.stop()
 
+cat_map = {c["name"]: c["id"] for c in categories}
+
 st.sidebar.header("Filtros")
-category_name = st.sidebar.selectbox("Categoría", sorted(cat_map.keys()))
-limit = st.sidebar.slider("Cantidad de items", 5, 20, 10)
+category = st.sidebar.selectbox("Categoría", sorted(cat_map.keys()))
+limit = st.sidebar.slider("Cantidad de productos", 5, 20, 10)
 
-# =====================
-# Buscar
-# =====================
 if st.sidebar.button("🔍 Buscar"):
-    with st.spinner("Consultando ranking de más vendidos..."):
-        highlights = get_best_sellers(token, cat_map[category_name])
-        records = []
+    with st.spinner("Consultando más vendidos..."):
+        highlights = get_best_sellers(token, cat_map[category])
 
+        records = []
         for h in highlights[:limit]:
             if h.get("type") == "ITEM":
                 item = get_item(token, h["id"])
                 if item:
                     records.append(fetch_product_data(token, item, h["position"]))
 
-        if not records:
-            st.warning("Esta categoría no tiene ranking de más vendidos.")
         st.session_state["data"] = records
 
 # =====================
@@ -204,7 +183,8 @@ if st.sidebar.button("🔍 Buscar"):
 # =====================
 if st.session_state["data"]:
     df = pd.DataFrame(st.session_state["data"])
-    st.subheader(f"Top {len(df)} – {category_name}")
+
+    st.subheader("📊 Resultados")
     st.dataframe(df, use_container_width=True)
 
     st.plotly_chart(
@@ -213,14 +193,14 @@ if st.session_state["data"]:
     )
 
     st.plotly_chart(
-        px.scatter(df, x="Precio", y="Ventas", hover_data=["Título"], title="Precio vs Ventas"),
+        px.scatter(df, x="Precio", y="Ventas", hover_data=["Título"],
+                   title="Precio vs Ventas"),
         use_container_width=True,
     )
 
-    csv = df.to_csv(index=False)
     st.download_button(
         "📥 Descargar CSV",
-        csv,
-        file_name="ranking_ml.csv",
-        mime="text/csv",
+        df.to_csv(index=False),
+        "ranking_ml.csv",
+        "text/csv",
     )
