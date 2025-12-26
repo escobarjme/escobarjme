@@ -29,18 +29,19 @@ st.session_state.setdefault("access_token", None)
 st.session_state.setdefault("data", [])
 
 # =====================
-# Categorías FIJAS (NO BLOQUEABLES)
+# Categorías válidas (HIJA)
 # =====================
 CATEGORIES = {
-    "Electrónica": "MLA1000",
-    "Celulares": "MLA1051",
-    "Computación": "MLA1648",
-    "Hogar y Jardín": "MLA1574",
-    "Electrodomésticos": "MLA5725",
-    "Herramientas": "MLA1500",
-    "Deportes y Fitness": "MLA1403",
-    "Moda": "MLA1430",
-    "Accesorios para Vehículos": "MLA1743",
+    "Celulares y Smartphones": "MLA1055",
+    "Televisores": "MLA1002",
+    "Notebooks": "MLA1652",
+    "Zapatillas": "MLA109027",
+    "Heladeras": "MLA5726",
+    "Lavarropas": "MLA5727",
+    "Auriculares": "MLA3697",
+    "Smartwatches": "MLA126793",
+    "Consolas": "MLA373840",
+    "Herramientas Eléctricas": "MLA1500",
 }
 
 # =====================
@@ -64,7 +65,7 @@ def exchange_code_for_token(code):
     }
     r = requests.post(TOKEN_URL, data=payload, timeout=10)
     if r.status_code != 200:
-        st.error("❌ Error obteniendo token")
+        st.error("❌ Error al obtener token")
         st.text(r.text)
         return None
     return r.json().get("access_token")
@@ -83,6 +84,19 @@ def get_best_sellers(token, category_id):
     if r.status_code != 200:
         return []
     return r.json().get("content", [])
+
+def get_best_sellers_fallback(token, category_id, limit):
+    url = f"https://api.mercadolibre.com/sites/{SITE_ID}/search"
+    headers = {"Authorization": f"Bearer {token}"}
+    params = {
+        "category": category_id,
+        "sort": "sold_quantity_desc",
+        "limit": limit,
+    }
+    r = requests.get(url, headers=headers, params=params, timeout=10)
+    if r.status_code != 200:
+        return []
+    return r.json().get("results", [])
 
 def get_item(token, item_id):
     url = f"https://api.mercadolibre.com/items/{item_id}"
@@ -182,14 +196,21 @@ if st.sidebar.button("🔍 Buscar"):
         highlights = get_best_sellers(token, CATEGORIES[category_name])
         records = []
 
-        for h in highlights[:limit]:
-            if h.get("type") == "ITEM":
-                item = get_item(token, h["id"])
-                if item:
-                    records.append(fetch_product_data(token, item, h["position"]))
+        if highlights:
+            for h in highlights[:limit]:
+                if h.get("type") == "ITEM":
+                    item = get_item(token, h["id"])
+                    if item:
+                        records.append(fetch_product_data(token, item, h["position"]))
+        else:
+            fallback = get_best_sellers_fallback(
+                token, CATEGORIES[category_name], limit
+            )
+            for idx, item in enumerate(fallback, start=1):
+                records.append(fetch_product_data(token, item, idx))
 
         if not records:
-            st.warning("Esta categoría no tiene ranking disponible.")
+            st.warning("No se encontraron datos para esta categoría.")
 
         st.session_state["data"] = records
 
