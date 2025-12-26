@@ -11,7 +11,7 @@ from datetime import datetime
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 REDIRECT_URI = os.getenv("REDIRECT_URI")
-SITE_ID = os.getenv("SITE_ID", "MLA")
+SITE_ID = "MLA"
 
 if not CLIENT_ID or not CLIENT_SECRET or not REDIRECT_URI:
     st.error("❌ Faltan variables de entorno: CLIENT_ID / CLIENT_SECRET / REDIRECT_URI")
