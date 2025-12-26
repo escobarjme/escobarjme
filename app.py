@@ -12,6 +12,7 @@ CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 REDIRECT_URI = os.getenv("REDIRECT_URI")
 SITE_ID = "MLA"
+st.write("SITE_ID:", SITE_ID)
 
 if not CLIENT_ID or not CLIENT_SECRET or not REDIRECT_URI:
     st.error("❌ Faltan variables de entorno: CLIENT_ID / CLIENT_SECRET / REDIRECT_URI")
