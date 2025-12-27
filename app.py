@@ -4,6 +4,12 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
+
+st.write("Query params:", st.query_params)
+
+if "code" in st.query_params:
+    st.success(f"Código recibido: {st.query_params['code']}")
+
 # =====================
 # Configuración general
 # =====================
