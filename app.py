@@ -91,25 +91,34 @@ def get_product_items(token, product_id):
         return []
     return r.json().get("results", [])
 
+@st.cache_data(ttl=3600)
+def get_item(token, item_id):
+    url = f"https://api.mercadolibre.com/items/{item_id}"
+    headers = {"Authorization": f"Bearer {token}"}
+    r = requests.get(url, headers=headers, timeout=10)
+    if r.status_code != 200:
+        return None
+    return r.json()
+
 # =====================
-# Normalización mínima (sin rate limit)
+# Normalización de datos
 # =====================
 def fetch_product_data(item, position):
     return {
         "Posición": position,
-        "Título": item["title"],
-        "Precio": item["price"],
+        "Título": item.get("title"),
+        "Precio": item.get("price"),
         "Ventas": item.get("sold_quantity", 0),
         "Condición": item.get("condition"),
-        "Link": item["permalink"],
+        "Link": item.get("permalink"),
     }
 
 # =====================
 # UI
 # =====================
 st.set_page_config(
-    "MercadoLibre – Más Vendidos",
-    "🛒",
+    page_title="MercadoLibre – Más Vendidos",
+    page_icon="🛒",
     layout="wide"
 )
 
@@ -146,12 +155,15 @@ if st.sidebar.button("🔍 Buscar"):
 
         for h in highlights[:limit]:
             if h.get("type") == "PRODUCT":
-                items = get_product_items(token, h["id"])
-                if items:
-                    item = items[0]  # item principal
-                    records.append(
-                        fetch_product_data(item, h["position"])
-                    )
+                product_items = get_product_items(token, h["id"])
+                if product_items:
+                    item_id = product_items[0].get("item_id")
+                    if item_id:
+                        item = get_item(token, item_id)
+                        if item:
+                            records.append(
+                                fetch_product_data(item, h["position"])
+                            )
 
         if not records:
             st.warning("No se encontraron datos para esta categoría.")
