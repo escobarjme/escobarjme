@@ -1,12 +1,16 @@
 import streamlit as st
 import requests
-import os
 
 # ========================
 # CONFIG
 # ========================
 SITE_ID = "MLA"
 API_BASE = "https://api.mercadolibre.com"
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0",
+    "Accept": "application/json"
+}
 
 st.set_page_config(page_title="MercadoLibre Argentina – Más Vendidos", layout="wide")
 
@@ -16,22 +20,25 @@ st.set_page_config(page_title="MercadoLibre Argentina – Más Vendidos", layout
 @st.cache_data
 def get_categories():
     url = f"{API_BASE}/sites/{SITE_ID}/categories"
-    r = requests.get(url, timeout=10)
-    r.raise_for_status()
+    r = requests.get(url, headers=HEADERS, timeout=10)
+    if r.status_code != 200:
+        return []
     return r.json()
 
 @st.cache_data
 def get_subcategories(category_id):
     url = f"{API_BASE}/categories/{category_id}"
-    r = requests.get(url, timeout=10)
-    r.raise_for_status()
+    r = requests.get(url, headers=HEADERS, timeout=10)
+    if r.status_code != 200:
+        return []
     return r.json().get("children_categories", [])
 
 @st.cache_data
 def get_highlights(category_id):
     url = f"{API_BASE}/highlights/{SITE_ID}/category/{category_id}"
-    r = requests.get(url, timeout=10)
-    r.raise_for_status()
+    r = requests.get(url, headers=HEADERS, timeout=10)
+    if r.status_code != 200:
+        return []
     return r.json().get("content", [])
 
 def get_items(item_ids):
@@ -40,8 +47,9 @@ def get_items(item_ids):
 
     ids = ",".join(item_ids)
     url = f"{API_BASE}/items?ids={ids}"
-    r = requests.get(url, timeout=10)
-    r.raise_for_status()
+    r = requests.get(url, headers=HEADERS, timeout=10)
+    if r.status_code != 200:
+        return []
 
     return [i["body"] for i in r.json() if i.get("code") == 200]
 
@@ -49,10 +57,14 @@ def get_items(item_ids):
 # UI
 # ========================
 st.sidebar.title("Filtros")
-
 st.sidebar.write("SITE_ID:", SITE_ID)
 
 categories = get_categories()
+
+if not categories:
+    st.error("❌ No se pudieron cargar las categorías (bloqueo de API)")
+    st.stop()
+
 category_map = {c["name"]: c["id"] for c in categories}
 
 selected_category_name = st.sidebar.selectbox(
@@ -100,5 +112,4 @@ for idx, item in enumerate(items):
         st.image(item.get("thumbnail"), use_container_width=True)
         st.subheader(item.get("title"))
         st.write(f"💰 ${item.get('price'):,}")
-        st.write(f"🏷️ {item.get('condition', '').capitalize()}")
         st.markdown(f"[Ver en MercadoLibre]({item.get('permalink')})")
