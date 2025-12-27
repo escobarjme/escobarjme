@@ -68,12 +68,11 @@ def get_any_detail(token, obj_id, obj_type):
     headers = {"Authorization": f"Bearer {token}"}
     
     if obj_type == "PRODUCT":
-        # Consultamos Catálogo
         r = requests.get(f"{API_BASE}/products/{obj_id}", headers=headers, timeout=15)
         if r.status_code == 200:
             p_data = r.json()
-            # Buscamos el ganador de la oferta principal (Buy Box)
             winner = p_data.get("buy_box_winner")
+            # Si hay un ganador de buy box, sacamos precio y link de ahí
             if winner:
                 return {
                     "title": p_data.get("name"),
@@ -81,14 +80,14 @@ def get_any_detail(token, obj_id, obj_type):
                     "sold_quantity": p_data.get("sold_quantity", 0),
                     "permalink": winner.get("permalink")
                 }
+            # Fallback si no hay ganador pero hay datos de producto
             return {
                 "title": p_data.get("name"),
-                "price": None,
+                "price": p_data.get("price"), # Algunos productos de catálogo tienen precio base
                 "sold_quantity": p_data.get("sold_quantity", 0),
                 "permalink": f"https://www.mercadolibre.com.ar/p/{obj_id}"
             }
     else:
-        # Consultamos Publicación directa
         r = requests.get(f"{API_BASE}/items/{obj_id}", headers=headers, timeout=15)
         if r.status_code == 200:
             i_data = r.json()
@@ -105,7 +104,6 @@ def get_any_detail(token, obj_id, obj_type):
 # =====================
 st.title("🛒 MercadoLibre Argentina – Más Vendidos")
 
-# Manejo de OAuth
 if "code" in st.query_params and not st.session_state["access_token"]:
     token = exchange_code_for_token(st.query_params["code"])
     if token:
@@ -114,32 +112,28 @@ if "code" in st.query_params and not st.session_state["access_token"]:
         st.rerun()
 
 if not st.session_state["access_token"]:
-    st.info("👋 Bienvenido. Para ver los datos actualizados, por favor inicia sesión.")
+    st.info("👋 Por favor, inicia sesión para consultar datos.")
     st.link_button("🔐 Iniciar sesión con MercadoLibre", f"{AUTH_URL}?response_type=code&client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}")
     st.stop()
 
 token = st.session_state["access_token"]
 
 with st.sidebar:
-    st.header("Filtros de Búsqueda")
+    st.header("Filtros")
     cat_name = st.selectbox("Categoría", list(CATEGORIES.keys()))
-    limit = st.slider("Cantidad de productos", 5, 50, 10)
+    limit = st.slider("Cantidad", 5, 50, 10)
     btn_buscar = st.button("🔍 Buscar más vendidos")
 
 if btn_buscar:
-    with st.spinner(f"Analizando ranking de {cat_name}..."):
+    with st.spinner("Analizando ranking..."):
         results = []
         highlights = get_highlights(token, CATEGORIES[cat_name])
         
         progress = st.progress(0)
-        items_to_process = highlights[:limit]
+        items = highlights[:limit]
         
-        for i, h in enumerate(items_to_process):
-            obj_id = h.get("id")
-            obj_type = h.get("type")
-            
-            detail = get_any_detail(token, obj_id, obj_type)
-            
+        for i, h in enumerate(items):
+            detail = get_any_detail(token, h.get("id"), h.get("type"))
             if detail:
                 results.append({
                     "Posición": h.get("position", i+1),
@@ -148,8 +142,7 @@ if btn_buscar:
                     "Ventas": detail.get("sold_quantity"),
                     "Link": detail.get("permalink")
                 })
-            
-            progress.progress((i + 1) / len(items_to_process))
+            progress.progress((i + 1) / len(items))
         
         st.session_state["data"] = results
         st.session_state["last_category"] = cat_name
@@ -158,28 +151,24 @@ if btn_buscar:
 # MOSTRAR TABLA
 if st.session_state["data"]:
     st.subheader(f"Top Ventas: {st.session_state['last_category']}")
-    
     df = pd.DataFrame(st.session_state["data"])
     
-    # Formatear la tabla para mostrar el link como URL clickable en Streamlit
     st.dataframe(
         df,
         column_config={
-            "Link": st.column_config.LinkColumn("Enlace Producto"),
+            "Posición": st.column_config.NumberColumn("Posición"),
+            "Título": st.column_config.TextColumn("Título"),
             "Precio": st.column_config.NumberColumn("Precio ($)", format="$ %.2f"),
-            "Ventas": st.column_config.NumberColumn("Ventas Totales")
+            "Ventas": st.column_config.NumberColumn("Ventas Totales"),
+            "Link": st.column_config.LinkColumn("Enlace al Producto")
         },
         use_container_width=True,
         hide_index=True
     )
     
-    col_dl, col_cl = st.columns([1, 4])
-    with col_dl:
-        csv = df.to_csv(index=False).encode('utf-8')
-        st.download_button("⬇️ Descargar CSV", csv, f"ranking_{st.session_state['last_category']}.csv", "text/csv")
-    with col_cl:
-        if st.button("🗑️ Limpiar Resultados"):
-            st.session_state["data"] = []
-            st.rerun()
+    st.download_button("⬇️ Descargar CSV", df.to_csv(index=False).encode('utf-8'), f"ranking_{cat_name}.csv", "text/csv")
+    if st.button("🗑️ Limpiar Resultados"):
+        st.session_state["data"] = []
+        st.rerun()
 else:
-    st.info("Configura los filtros a la izquierda y presiona 'Buscar'.")
+    st.info("Configura los filtros y presiona 'Buscar'.")
