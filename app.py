@@ -61,11 +61,9 @@ def exchange_code_for_token(code):
     try:
         r = requests.post(TOKEN_URL, data=payload, timeout=15)
         if r.status_code != 200:
-            st.error(f"❌ Error OAuth: {r.text}")
             return None
         return r.json().get("access_token")
-    except Exception as e:
-        st.error(f"Error de conexión: {e}")
+    except:
         return None
 
 # =====================
@@ -75,26 +73,35 @@ def exchange_code_for_token(code):
 def get_highlights(token, category_id):
     url = f"{API_BASE}/highlights/{SITE_ID}/category/{category_id}"
     headers = {"Authorization": f"Bearer {token}"}
-    r = requests.get(url, headers=headers, timeout=15)
-    return r.json().get("content", []) if r.status_code == 200 else []
+    try:
+        r = requests.get(url, headers=headers, timeout=15)
+        return r.json().get("content", []) if r.status_code == 200 else []
+    except:
+        return []
 
 @st.cache_data(ttl=300)
 def get_product(token, product_id):
-    r = requests.get(
-        f"{API_BASE}/products/{product_id}",
-        headers={"Authorization": f"Bearer {token}"},
-        timeout=15
-    )
-    return r.json() if r.status_code == 200 else None
+    try:
+        r = requests.get(
+            f"{API_BASE}/products/{product_id}",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=15
+        )
+        return r.json() if r.status_code == 200 else None
+    except:
+        return None
 
 @st.cache_data(ttl=300)
 def get_item(token, item_id):
-    r = requests.get(
-        f"{API_BASE}/items/{item_id}",
-        headers={"Authorization": f"Bearer {token}"},
-        timeout=15
-    )
-    return r.json() if r.status_code == 200 else None
+    try:
+        r = requests.get(
+            f"{API_BASE}/items/{item_id}",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=15
+        )
+        return r.json() if r.status_code == 200 else None
+    except:
+        return None
 
 def format_item(item, position):
     return {
@@ -112,10 +119,8 @@ def format_item(item, position):
 st.title("🛒 MercadoLibre Argentina – Más Vendidos")
 
 # Manejo de OAuth Callback
-query_params = st.query_params
-if "code" in query_params and not st.session_state["access_token"]:
-    code = query_params["code"]
-    token = exchange_code_for_token(code)
+if "code" in st.query_params and not st.session_state["access_token"]:
+    token = exchange_code_for_token(st.query_params["code"])
     if token:
         st.session_state["access_token"] = token
         st.query_params.clear()
@@ -123,13 +128,13 @@ if "code" in query_params and not st.session_state["access_token"]:
 
 # Bloqueo si no hay login
 if not st.session_state["access_token"]:
-    st.info("Por favor, inicia sesión para acceder a los datos de la API.")
+    st.info("Inicia sesión para consultar los productos más vendidos.")
     st.link_button("🔐 Login con MercadoLibre", get_auth_url())
     st.stop()
 
 token = st.session_state["access_token"]
 
-# Sidebar para filtros
+# Sidebar
 with st.sidebar:
     st.header("Filtros")
     category_name = st.selectbox("Categoría", list(CATEGORIES.keys()))
@@ -138,31 +143,35 @@ with st.sidebar:
 
 # Lógica de búsqueda
 if buscar:
-    with st.spinner(f"Consultando ranking de {category_name}..."):
+    with st.spinner(f"Consultando ranking..."):
         records = []
         highlights = get_highlights(token, CATEGORIES[category_name])
         
-        # Barra de progreso para feedback visual
         progress_bar = st.progress(0)
         
         for idx, h in enumerate(highlights[:limit]):
             h_type = h.get("type")
             obj_id = h.get("id")
             position = h.get("position", idx + 1)
-
             item_id = None
+
             if h_type == "PRODUCT":
-                product = get_product(token, obj_id)
-                if product and "buy_box_winner" in product:
-                    item_id = product["buy_box_winner"].get("item_id")
-                elif product and "id" in product: # Fallback si no hay buybox
-                    item_id = obj_id 
-            else: # Tipo ITEM
+                product_data = get_product(token, obj_id)
+                # --- CORRECCIÓN CRÍTICA AQUÍ ---
+                if product_data and isinstance(product_data, dict):
+                    winner = product_data.get("buy_box_winner")
+                    if isinstance(winner, dict):
+                        item_id = winner.get("item_id")
+                    
+                    # Si no hay ganador de buybox, usamos el ID del producto como fallback
+                    if not item_id:
+                        item_id = obj_id 
+            else:
                 item_id = obj_id
 
             if item_id:
                 item = get_item(token, item_id)
-                if item and "title" in item:
+                if item and isinstance(item, dict) and item.get("title"):
                     records.append(format_item(item, position))
             
             progress_bar.progress((idx + 1) / len(highlights[:limit]))
@@ -170,31 +179,25 @@ if buscar:
         st.session_state["data"] = records
         st.session_state["last_category"] = category_name
 
-# Mostrar Resultados si existen en el estado
+# Renderizado de Tabla
 if st.session_state["data"]:
-    cat = st.session_state.get("last_category", "Seleccionada")
-    st.subheader(f"Top {len(st.session_state['data'])} - {cat}")
+    cat = st.session_state.get("last_category", "")
+    st.subheader(f"Resultados: {cat}")
     
     df = pd.DataFrame(st.session_state["data"]).sort_values("Posición")
     
-    # Formatear precio para mejor visualización
+    # Formato visual
     df_display = df.copy()
-    df_display["Precio"] = df_display["Precio"].map("${:,.2f}".format)
+    if "Precio" in df_display.columns:
+        df_display["Precio"] = df_display["Precio"].apply(lambda x: f"$ {x:,.2f}" if x else "N/A")
     
     st.dataframe(df_display, use_container_width=True, hide_index=True)
 
-    col1, col2 = st.columns(2)
-    with col1:
-        csv = df.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="⬇️ Descargar CSV",
-            data=csv,
-            file_name=f"ranking_ml_{cat.lower()}.csv",
-            mime="text/csv",
-        )
-    with col2:
-        if st.button("🗑️ Limpiar Resultados"):
-            st.session_state["data"] = []
-            st.rerun()
+    csv = df.to_csv(index=False).encode('utf-8')
+    st.download_button("⬇️ Descargar CSV", csv, f"ranking_{cat}.csv", "text/csv")
+    
+    if st.button("🗑️ Limpiar"):
+        st.session_state["data"] = []
+        st.rerun()
 else:
-    st.info("Usa el panel de la izquierda para buscar productos.")
+    st.info("Haz clic en 'Buscar' para cargar los datos.")
