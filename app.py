@@ -173,6 +173,7 @@ if st.sidebar.button("🔍 Buscar"):
                         records.append(
                             fetch_product_data(item, h["position"])
                             )
+            st.write("Procesando:", h["id"])
 
 
         if not records:
