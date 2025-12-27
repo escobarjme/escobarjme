@@ -29,7 +29,7 @@ st.session_state.setdefault("access_token", None)
 st.session_state.setdefault("data", [])
 
 # =====================
-# Categorías (HIJAS)
+# Categorías
 # =====================
 CATEGORIES = {
     "Celulares y Smartphones": "MLA1055",
@@ -71,7 +71,7 @@ def exchange_code_for_token(code):
     return r.json().get("access_token")
 
 # =====================
-# API helpers (CACHEADOS)
+# API helpers (cacheados)
 # =====================
 @st.cache_data(ttl=3600)
 def get_best_sellers(token, category_id):
@@ -101,7 +101,7 @@ def get_item(token, item_id):
     return r.json()
 
 # =====================
-# Normalización de datos
+# Normalización
 # =====================
 def fetch_product_data(item, position):
     return {
@@ -119,7 +119,7 @@ def fetch_product_data(item, position):
 st.set_page_config(
     page_title="MercadoLibre – Más Vendidos",
     page_icon="🛒",
-    layout="wide"
+    layout="wide",
 )
 
 st.title("🛒 MercadoLibre Argentina – Más Vendidos")
@@ -148,6 +148,9 @@ st.sidebar.header("Filtros")
 category_name = st.sidebar.selectbox("Categoría", CATEGORIES.keys())
 limit = st.sidebar.slider("Cantidad de productos", 5, 20, 10)
 
+# =====================
+# Búsqueda
+# =====================
 if st.sidebar.button("🔍 Buscar"):
     with st.spinner("Consultando ranking..."):
         highlights = get_best_sellers(token, CATEGORIES[category_name])
@@ -156,10 +159,10 @@ if st.sidebar.button("🔍 Buscar"):
         for h in highlights[:limit]:
             highlight_id = h["id"]
             st.write("Procesando:", highlight_id)
-            # 1️⃣ Intentar como ITEM directo (esto funciona en MLA)
+
+            # 1️⃣ Intentar como ITEM directo
             item = get_item(token, highlight_id)
             if item and item.get("title") and item.get("price") is not None:
-            
                 records.append(
                     fetch_product_data(item, h["position"])
                 )
@@ -172,14 +175,9 @@ if st.sidebar.button("🔍 Buscar"):
                 if item_id:
                     item = get_item(token, item_id)
                     if item and item.get("title") and item.get("price") is not None:
-                    
                         records.append(
                             fetch_product_data(item, h["position"])
-                            )
-                            st.success(f"✔ Item desde PRODUCT cargado: {item.get('id')}")
-            st.write("Procesando:", h["id"])
-            st.success(f"✔ Item cargado: {item['id']}")
-
+                        )
 
         if not records:
             st.warning("No se encontraron datos para esta categoría.")
