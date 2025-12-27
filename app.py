@@ -205,7 +205,7 @@ if st.sidebar.button("🔍 Buscar"):
 
         if highlights:
             for h in highlights[:limit]:
-                if h.get("type") == "ITEM":
+                if h.get("type") in ("ITEM", "PRODUCT"):
                     item = get_item(token, h["id"])
                     if item:
                         records.append(fetch_product_data(token, item, h["position"]))
