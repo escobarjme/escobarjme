@@ -176,7 +176,7 @@ if st.sidebar.button("🔍 Buscar"):
                         records.append(
                             fetch_product_data(item, h["position"])
                             )
-                             st.success(f"✔ Item desde PRODUCT cargado: {item.get('id')}")
+            st.success(f"✔ Item desde PRODUCT cargado: {item.get('id')}")
             st.write("Procesando:", h["id"])
             st.success(f"✔ Item cargado: {item['id']}")
 
