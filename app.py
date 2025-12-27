@@ -1,64 +1,140 @@
 import streamlit as st
 import requests
+import pandas as pd
 
-# ========================
-# CONFIG
-# ========================
+# =========================
+# CONFIG GENERAL
+# =========================
+st.set_page_config(page_title="MercadoLibre – Más Vendidos", layout="wide")
+
 SITE_ID = "MLA"
-API_BASE = "https://api.mercadolibre.com"
 
+CLIENT_ID = st.secrets["CLIENT_ID"]
+CLIENT_SECRET = st.secrets["CLIENT_SECRET"]
+REDIRECT_URI = st.secrets["REDIRECT_URI"]
+
+# =========================
+# HEADERS (ANTI 403 Railway)
+# =========================
 HEADERS = {
-    "User-Agent": "Mozilla/5.0",
-    "Accept": "application/json"
+    "User-Agent": (
+        "Mozilla/5.0 (X11; Linux x86_64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "es-AR,es;q=0.9,en;q=0.8",
+    "Referer": "https://www.mercadolibre.com.ar/",
+    "Origin": "https://www.mercadolibre.com.ar",
 }
 
-st.set_page_config(page_title="MercadoLibre Argentina – Más Vendidos", layout="wide")
+# =========================
+# AUTH
+# =========================
+def exchange_code_for_token(code):
+    url = "https://api.mercadolibre.com/oauth/token"
+    data = {
+        "grant_type": "authorization_code",
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
+        "code": code,
+        "redirect_uri": REDIRECT_URI,
+    }
+    r = requests.post(url, data=data, timeout=10)
+    r.raise_for_status()
+    return r.json()["access_token"]
 
-# ========================
-# FUNCIONES
-# ========================
-@st.cache_data
+
+# =========================
+# API HELPERS
+# =========================
+@st.cache_data(show_spinner=False)
 def get_categories():
-    url = f"{API_BASE}/sites/{SITE_ID}/categories"
+    url = f"https://api.mercadolibre.com/sites/{SITE_ID}/categories"
     r = requests.get(url, headers=HEADERS, timeout=10)
     if r.status_code != 200:
         return []
     return r.json()
 
-@st.cache_data
-def get_subcategories(category_id):
-    url = f"{API_BASE}/categories/{category_id}"
-    r = requests.get(url, headers=HEADERS, timeout=10)
-    if r.status_code != 200:
-        return []
-    return r.json().get("children_categories", [])
 
-@st.cache_data
-def get_highlights(category_id):
-    url = f"{API_BASE}/highlights/{SITE_ID}/category/{category_id}"
-    r = requests.get(url, headers=HEADERS, timeout=10)
+def get_highlights(token, category_id):
+    url = f"https://api.mercadolibre.com/highlights/{SITE_ID}/category/{category_id}"
+    headers = {**HEADERS, "Authorization": f"Bearer {token}"}
+    r = requests.get(url, headers=headers, timeout=10)
     if r.status_code != 200:
         return []
     return r.json().get("content", [])
 
-def get_items(item_ids):
-    if not item_ids:
-        return []
 
-    ids = ",".join(item_ids)
-    url = f"{API_BASE}/items?ids={ids}"
-    r = requests.get(url, headers=HEADERS, timeout=10)
+def get_fallback_best_sellers(token, category_id, limit):
+    url = f"https://api.mercadolibre.com/sites/{SITE_ID}/search"
+    headers = {**HEADERS, "Authorization": f"Bearer {token}"}
+    params = {
+        "category": category_id,
+        "sort": "sold_quantity_desc",
+        "limit": limit,
+    }
+    r = requests.get(url, headers=headers, params=params, timeout=10)
     if r.status_code != 200:
         return []
+    return r.json().get("results", [])
 
-    return [i["body"] for i in r.json() if i.get("code") == 200]
 
-# ========================
+def get_item(token, item_id):
+    url = f"https://api.mercadolibre.com/items/{item_id}"
+    headers = {**HEADERS, "Authorization": f"Bearer {token}"}
+    r = requests.get(url, headers=headers, timeout=10)
+    if r.status_code != 200:
+        return None
+    return r.json()
+
+
+def build_record(item, position):
+    return {
+        "Ranking": position,
+        "Título": item.get("title"),
+        "Precio": item.get("price"),
+        "Vendidos": item.get("sold_quantity"),
+        "Link": item.get("permalink"),
+    }
+
+
+# =========================
 # UI
-# ========================
+# =========================
 st.sidebar.title("Filtros")
 st.sidebar.write("SITE_ID:", SITE_ID)
 
+# =========================
+# LOGIN FLOW
+# =========================
+params = st.query_params
+
+if "code" not in params and "access_token" not in st.session_state:
+    auth_url = (
+        "https://auth.mercadolibre.com.ar/authorization"
+        f"?response_type=code&client_id={CLIENT_ID}"
+        f"&redirect_uri={REDIRECT_URI}"
+    )
+    st.markdown(f"[🔐 Login con MercadoLibre]({auth_url})")
+    st.stop()
+
+if "access_token" not in st.session_state:
+    try:
+        st.session_state["access_token"] = exchange_code_for_token(
+            params["code"]
+        )
+        st.success("🔓 Autenticado correctamente")
+    except Exception as e:
+        st.error("Error en autenticación")
+        st.exception(e)
+        st.stop()
+
+token = st.session_state["access_token"]
+
+# =========================
+# CATEGORIES
+# =========================
 categories = get_categories()
 
 if not categories:
@@ -67,49 +143,39 @@ if not categories:
 
 category_map = {c["name"]: c["id"] for c in categories}
 
-selected_category_name = st.sidebar.selectbox(
-    "Categoría",
-    list(category_map.keys())
+category_name = st.sidebar.selectbox(
+    "Categoría", sorted(category_map.keys())
 )
 
-selected_category_id = category_map[selected_category_name]
+limit = st.sidebar.slider("Cantidad", 5, 20, 10)
 
-subcategories = get_subcategories(selected_category_id)
-subcategory_map = {c["name"]: c["id"] for c in subcategories}
-
-selected_subcategory_id = selected_category_id
-
-if subcategory_map:
-    selected_sub_name = st.sidebar.selectbox(
-        "Subcategoría",
-        list(subcategory_map.keys())
-    )
-    selected_subcategory_id = subcategory_map[selected_sub_name]
-
-# ========================
-# CONTENIDO
-# ========================
 st.title("🛒 MercadoLibre Argentina – Más Vendidos")
 
-highlights = get_highlights(selected_subcategory_id)
+# =========================
+# DATA LOAD
+# =========================
+with st.spinner("Cargando productos..."):
+    category_id = category_map[category_name]
 
-if not highlights:
+    highlights = get_highlights(token, category_id)
+    records = []
+
+    if highlights:
+        for h in highlights[:limit]:
+            if h.get("type") == "ITEM":
+                item = get_item(token, h["id"])
+                if item:
+                    records.append(build_record(item, h["position"]))
+    else:
+        fallback = get_fallback_best_sellers(token, category_id, limit)
+        for idx, item in enumerate(fallback, start=1):
+            records.append(build_record(item, idx))
+
+# =========================
+# OUTPUT
+# =========================
+if not records:
     st.warning("No se encontraron datos para esta categoría.")
-    st.stop()
-
-item_ids = [h["id"] for h in highlights if h["type"] == "ITEM"]
-
-items = get_items(item_ids)
-
-if not items:
-    st.warning("No se pudieron cargar los productos.")
-    st.stop()
-
-cols = st.columns(4)
-
-for idx, item in enumerate(items):
-    with cols[idx % 4]:
-        st.image(item.get("thumbnail"), use_container_width=True)
-        st.subheader(item.get("title"))
-        st.write(f"💰 ${item.get('price'):,}")
-        st.markdown(f"[Ver en MercadoLibre]({item.get('permalink')})")
+else:
+    df = pd.DataFrame(records)
+    st.dataframe(df, use_container_width=True)
