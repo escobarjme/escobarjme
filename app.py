@@ -154,16 +154,26 @@ if st.sidebar.button("🔍 Buscar"):
         records = []
 
         for h in highlights[:limit]:
-            if h.get("type") == "PRODUCT":
-                product_items = get_product_items(token, h["id"])
-                if product_items:
-                    item_id = product_items[0].get("item_id")
-                    if item_id:
-                        item = get_item(token, item_id)
-                        if item:
-                            records.append(
-                                fetch_product_data(item, h["position"])
+            highlight_id = h["id"]
+            # 1️⃣ Intentar como ITEM directo (esto funciona en MLA)
+            item = get_item(token, highlight_id)
+            if item and item.get("title"):
+                records.append(
+                    fetch_product_data(item, h["position"])
+                )
+                continue
+
+            # 2️⃣ Fallback: tratarlo como PRODUCT
+            product_items = get_product_items(token, highlight_id)
+            if product_items:
+                item_id = product_items[0].get("item_id")
+                if item_id:
+                    item = get_item(token, item_id)
+                    if item:
+                        records.append(
+                            fetch_product_data(item, h["position"])
                             )
+
 
         if not records:
             st.warning("No se encontraron datos para esta categoría.")
