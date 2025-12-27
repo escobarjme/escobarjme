@@ -155,9 +155,11 @@ if st.sidebar.button("🔍 Buscar"):
 
         for h in highlights[:limit]:
             highlight_id = h["id"]
+            st.write("Procesando:", highlight_id)
             # 1️⃣ Intentar como ITEM directo (esto funciona en MLA)
             item = get_item(token, highlight_id)
-            if item and item.get("title"):
+            if item and item.get("title") and item.get("price") is not None:
+            
                 records.append(
                     fetch_product_data(item, h["position"])
                 )
@@ -169,11 +171,12 @@ if st.sidebar.button("🔍 Buscar"):
                 item_id = product_items[0].get("id")
                 if item_id:
                     item = get_item(token, item_id)
-                    if item:
+                    if item and item.get("title") and item.get("price") is not None:
+                    
                         records.append(
                             fetch_product_data(item, h["position"])
                             )
-                        
+                            st.success(f"✔ Item desde PRODUCT cargado: {item.get('id')}")
             st.write("Procesando:", h["id"])
             st.success(f"✔ Item cargado: {item['id']}")
 
