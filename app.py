@@ -215,3 +215,42 @@ if st.sidebar.button("🔍 Buscar más vendidos"):
 
                 rows.append({
                     "Posición": h["position"],
+                    "Título": title,
+                    "Precio": price,
+                    "Ventas": sold,
+                    "Link": link
+                })
+
+            st.session_state["results"] = rows
+
+# =====================
+# Resultados
+# =====================
+if st.session_state["results"]:
+    df = pd.DataFrame(st.session_state["results"])
+
+    st.subheader("📊 Ranking de más vendidos")
+    st.dataframe(df, use_container_width=True)
+
+    st.plotly_chart(
+        px.bar(df, x="Título", y="Precio", title="Precio por producto"),
+        use_container_width=True
+    )
+
+    st.plotly_chart(
+        px.scatter(
+            df,
+            x="Precio",
+            y="Ventas",
+            hover_data=["Título"],
+            title="Precio vs Ventas"
+        ),
+        use_container_width=True
+    )
+
+    st.download_button(
+        "📥 Descargar CSV",
+        df.to_csv(index=False),
+        "mas_vendidos_ml.csv",
+        "text/csv"
+    )
