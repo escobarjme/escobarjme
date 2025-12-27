@@ -5,32 +5,37 @@ import pandas as pd
 # =========================
 # CONFIG
 # =========================
-st.set_page_config(page_title="MercadoLibre Argentina – Más Vendidos", layout="wide")
+st.set_page_config(
+    page_title="MercadoLibre Argentina – Más Vendidos",
+    layout="wide"
+)
 
 API_BASE = "https://api.mercadolibre.com"
+SITE_ID = "MLA"
 
 CATEGORIES = {
+    "Televisores": "MLA1002",
     "Celulares": "MLA1055",
-    "Electrónica": "MLA1002",
-    "Computación": "MLA1648",
-    "Hogar": "MLA1574",
+    "Notebooks": "MLA1652",
+    "Zapatillas": "MLA109027",
 }
 
 # =========================
 # AUTH
 # =========================
 def get_token():
+    # ACCESS_TOKEN guardado en Railway / secrets
     return st.secrets["ACCESS_TOKEN"]
 
 # =========================
 # API CALLS
 # =========================
 @st.cache_data(ttl=300)
-def get_best_sellers(token, category_id):
-    url = f"{API_BASE}/highlights/MLA/category/{category_id}"
+def get_highlights(token, category_id):
+    url = f"{API_BASE}/highlights/{SITE_ID}/category/{category_id}"
     headers = {"Authorization": f"Bearer {token}"}
-    r = requests.get(url, headers=headers, timeout=15)
 
+    r = requests.get(url, headers=headers, timeout=15)
     if r.status_code != 200:
         return []
 
@@ -38,21 +43,32 @@ def get_best_sellers(token, category_id):
 
 
 @st.cache_data(ttl=300)
-def get_item(token, item_id):
-    url = f"{API_BASE}/items/{item_id}"
+def get_product(token, product_id):
+    url = f"{API_BASE}/products/{product_id}"
     headers = {"Authorization": f"Bearer {token}"}
-    r = requests.get(url, headers=headers, timeout=15)
 
+    r = requests.get(url, headers=headers, timeout=15)
     if r.status_code != 200:
         return None
 
     return r.json()
 
 
+@st.cache_data(ttl=300)
+def get_item(token, item_id):
+    url = f"{API_BASE}/items/{item_id}"
+    headers = {"Authorization": f"Bearer {token}"}
+
+    r = requests.get(url, headers=headers, timeout=15)
+    if r.status_code != 200:
+        return None
+
+    return r.json()
+
 # =========================
 # DATA FORMAT
 # =========================
-def fetch_product_data(item, position):
+def format_item(item, position):
     return {
         "Posición": position,
         "ID": item.get("id"),
@@ -61,7 +77,6 @@ def fetch_product_data(item, position):
         "Ventas": item.get("sold_quantity"),
         "Link": item.get("permalink"),
     }
-
 
 # =========================
 # UI
@@ -76,27 +91,40 @@ with st.sidebar:
 token = get_token()
 
 if st.sidebar.button("🔍 Buscar"):
-    with st.spinner("Consultando ranking de Mercado Libre..."):
-        highlights = get_best_sellers(token, CATEGORIES[category_name])
+    with st.spinner("Consultando ranking..."):
+        highlights = get_highlights(token, CATEGORIES[category_name])
         records = []
 
         for h in highlights[:limit]:
-            item_id = h.get("item_id")
+            product_id = h.get("id")
             position = h.get("position", 0)
+            h_type = h.get("type")
+
+            st.write(f"Procesando {h_type}: {product_id}")
+
+            item_id = None
+
+            # PRODUCT → ITEM
+            if h_type == "PRODUCT":
+                product = get_product(token, product_id)
+                if product:
+                    buy_box = product.get("buy_box_winner")
+                    if buy_box:
+                        item_id = buy_box.get("item_id")
+
+            # ITEM directo (fallback)
+            elif h_type == "ITEM":
+                item_id = product_id
 
             if not item_id:
                 continue
-
-            st.write(f"Procesando ITEM: {item_id}")
 
             item = get_item(token, item_id)
             if not item:
                 continue
 
             if item.get("title") and item.get("price") is not None:
-                records.append(
-                    fetch_product_data(item, position)
-                )
+                records.append(format_item(item, position))
 
         if not records:
             st.warning("No se encontraron datos para esta categoría.")
@@ -106,13 +134,11 @@ if st.sidebar.button("🔍 Buscar"):
 
             st.dataframe(df, use_container_width=True)
 
-            st.bar_chart(
-                df.set_index("Título")["Precio"]
-            )
+            st.bar_chart(df.set_index("Título")["Precio"])
 
             st.download_button(
                 "⬇️ Descargar CSV",
                 df.to_csv(index=False).encode("utf-8"),
-                file_name="mas_vendidos_ml.csv",
-                mime="text/csv",
+                "ranking_ml.csv",
+                "text/csv"
             )
