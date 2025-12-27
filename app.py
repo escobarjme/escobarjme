@@ -166,7 +166,7 @@ if st.sidebar.button("🔍 Buscar"):
             # 2️⃣ Fallback: tratarlo como PRODUCT
             product_items = get_product_items(token, highlight_id)
             if product_items:
-                item_id = product_items[0].get("item_id")
+                item_id = product_items[0].get("id")
                 if item_id:
                     item = get_item(token, item_id)
                     if item:
