@@ -80,9 +80,16 @@ def get_best_sellers(token, category_id):
         "User-Agent": "Mozilla/5.0",
         "Accept": "application/json",
     }
+
     r = requests.get(url, headers=headers, timeout=10)
+
+    st.subheader("🧪 DEBUG highlights")
+    st.text(f"Status code: {r.status_code}")
+    st.json(r.json())
+
     if r.status_code != 200:
         return []
+
     return r.json().get("content", [])
 
 def get_best_sellers_fallback(token, category_id, limit):
@@ -93,9 +100,16 @@ def get_best_sellers_fallback(token, category_id, limit):
         "sort": "sold_quantity_desc",
         "limit": limit,
     }
+
     r = requests.get(url, headers=headers, params=params, timeout=10)
+
+    st.subheader("🧪 DEBUG search fallback")
+    st.text(f"Status code: {r.status_code}")
+    st.json(r.json())
+
     if r.status_code != 200:
         return []
+
     return r.json().get("results", [])
 
 def get_item(token, item_id):
@@ -146,18 +160,11 @@ def format_rating_levels(levels):
     )
 
 def fetch_product_data(token, item, position):
-    rating, levels = get_item_rating(token, item["id"])
-    seller = get_seller_reputation(token, item["seller_id"])
     return {
         "Posición": position,
         "Título": item["title"],
         "Precio": item["price"],
         "Ventas": item.get("sold_quantity"),
-        "Visitas 30d": get_item_visits(token, item["id"]),
-        "Rating": rating,
-        "Distribución Rating": format_rating_levels(levels),
-        "Nivel Vendedor": seller.get("nivel"),
-        "Power Seller": seller.get("power"),
         "Link": item["permalink"],
     }
 
