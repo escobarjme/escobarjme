@@ -64,24 +64,40 @@ def get_highlights(token, category_id):
 
 @st.cache_data(ttl=300)
 def get_any_detail(token, obj_id, obj_type):
-    """Detecta si es PRODUCT o ITEM y consulta el endpoint correcto"""
+    """Obtiene detalles profundos de PRODUCT (Catálogo) o ITEM (Publicación)"""
     headers = {"Authorization": f"Bearer {token}"}
     
     if obj_type == "PRODUCT":
-        # Primero intentamos obtener el producto para sacar el 'buy_box_winner' (el item real a la venta)
+        # Consultamos Catálogo
         r = requests.get(f"{API_BASE}/products/{obj_id}", headers=headers, timeout=15)
         if r.status_code == 200:
             p_data = r.json()
+            # Buscamos el ganador de la oferta principal (Buy Box)
             winner = p_data.get("buy_box_winner")
-            if winner and winner.get("item_id"):
-                # Si hay ganador, consultamos ese item para tener precio y link real
-                return get_any_detail(token, winner.get("item_id"), "ITEM")
-            return p_data # Si no hay ganador, devolvemos el producto base
+            if winner:
+                return {
+                    "title": p_data.get("name"),
+                    "price": winner.get("price"),
+                    "sold_quantity": p_data.get("sold_quantity", 0),
+                    "permalink": winner.get("permalink")
+                }
+            return {
+                "title": p_data.get("name"),
+                "price": None,
+                "sold_quantity": p_data.get("sold_quantity", 0),
+                "permalink": f"https://www.mercadolibre.com.ar/p/{obj_id}"
+            }
     else:
-        # Consulta directa de ITEM
+        # Consultamos Publicación directa
         r = requests.get(f"{API_BASE}/items/{obj_id}", headers=headers, timeout=15)
         if r.status_code == 200:
-            return r.json()
+            i_data = r.json()
+            return {
+                "title": i_data.get("title"),
+                "price": i_data.get("price"),
+                "sold_quantity": i_data.get("sold_quantity", 0),
+                "permalink": i_data.get("permalink")
+            }
     return None
 
 # =====================
@@ -89,7 +105,7 @@ def get_any_detail(token, obj_id, obj_type):
 # =====================
 st.title("🛒 MercadoLibre Argentina – Más Vendidos")
 
-# OAuth
+# Manejo de OAuth
 if "code" in st.query_params and not st.session_state["access_token"]:
     token = exchange_code_for_token(st.query_params["code"])
     if token:
@@ -98,20 +114,20 @@ if "code" in st.query_params and not st.session_state["access_token"]:
         st.rerun()
 
 if not st.session_state["access_token"]:
-    st.info("Por favor, inicia sesión.")
-    st.link_button("🔐 Login con MercadoLibre", f"{AUTH_URL}?response_type=code&client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}")
+    st.info("👋 Bienvenido. Para ver los datos actualizados, por favor inicia sesión.")
+    st.link_button("🔐 Iniciar sesión con MercadoLibre", f"{AUTH_URL}?response_type=code&client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}")
     st.stop()
 
 token = st.session_state["access_token"]
 
 with st.sidebar:
-    st.header("Filtros")
+    st.header("Filtros de Búsqueda")
     cat_name = st.selectbox("Categoría", list(CATEGORIES.keys()))
-    limit = st.slider("Cantidad", 5, 50, 20)
-    btn_buscar = st.button("🔍 Buscar")
+    limit = st.slider("Cantidad de productos", 5, 50, 10)
+    btn_buscar = st.button("🔍 Buscar más vendidos")
 
 if btn_buscar:
-    with st.spinner("Obteniendo ranking y detalles..."):
+    with st.spinner(f"Analizando ranking de {cat_name}..."):
         results = []
         highlights = get_highlights(token, CATEGORIES[cat_name])
         
@@ -120,16 +136,16 @@ if btn_buscar:
         
         for i, h in enumerate(items_to_process):
             obj_id = h.get("id")
-            obj_type = h.get("type") # IMPORTANTE: 'PRODUCT' o 'ITEM'
+            obj_type = h.get("type")
             
             detail = get_any_detail(token, obj_id, obj_type)
             
             if detail:
                 results.append({
                     "Posición": h.get("position", i+1),
-                    "Título": detail.get("name") if obj_type == "PRODUCT" and not detail.get("title") else detail.get("title"),
+                    "Título": detail.get("title"),
                     "Precio": detail.get("price"),
-                    "Ventas": detail.get("sold_quantity", 0),
+                    "Ventas": detail.get("sold_quantity"),
                     "Link": detail.get("permalink")
                 })
             
@@ -142,19 +158,28 @@ if btn_buscar:
 # MOSTRAR TABLA
 if st.session_state["data"]:
     st.subheader(f"Top Ventas: {st.session_state['last_category']}")
+    
     df = pd.DataFrame(st.session_state["data"])
     
-    # Formatear precio para la vista
-    df_display = df.copy()
-    if "Precio" in df_display.columns:
-        df_display["Precio"] = df_display["Precio"].map(lambda x: f"$ {x:,.2f}" if x else "N/A")
-
-    st.dataframe(df_display, use_container_width=True, hide_index=True)
+    # Formatear la tabla para mostrar el link como URL clickable en Streamlit
+    st.dataframe(
+        df,
+        column_config={
+            "Link": st.column_config.LinkColumn("Enlace Producto"),
+            "Precio": st.column_config.NumberColumn("Precio ($)", format="$ %.2f"),
+            "Ventas": st.column_config.NumberColumn("Ventas Totales")
+        },
+        use_container_width=True,
+        hide_index=True
+    )
     
-    st.download_button("⬇️ Descargar CSV", df.to_csv(index=False).encode('utf-8'), f"ranking_{cat_name}.csv", "text/csv")
-    
-    if st.button("🗑️ Limpiar Resultados"):
-        st.session_state["data"] = []
-        st.rerun()
+    col_dl, col_cl = st.columns([1, 4])
+    with col_dl:
+        csv = df.to_csv(index=False).encode('utf-8')
+        st.download_button("⬇️ Descargar CSV", csv, f"ranking_{st.session_state['last_category']}.csv", "text/csv")
+    with col_cl:
+        if st.button("🗑️ Limpiar Resultados"):
+            st.session_state["data"] = []
+            st.rerun()
 else:
-    st.info("Selecciona una categoría y haz clic en 'Buscar'.")
+    st.info("Configura los filtros a la izquierda y presiona 'Buscar'.")
