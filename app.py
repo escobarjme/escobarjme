@@ -4,14 +4,8 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-
-st.write("Query params:", st.query_params)
-
-if "code" in st.query_params:
-    st.success(f"Código recibido: {st.query_params['code']}")
-
 # =====================
-# Configuración general
+# Configuración página
 # =====================
 st.set_page_config(
     page_title="MercadoLibre – Más Vendidos",
@@ -32,10 +26,11 @@ if not CLIENT_ID or not CLIENT_SECRET or not REDIRECT_URI:
     st.stop()
 
 # =====================
-# URLs Mercado Libre
+# URLs MercadoLibre
 # =====================
 AUTH_URL = "https://auth.mercadolibre.com.ar/authorization"
 TOKEN_URL = "https://api.mercadolibre.com/oauth/token"
+API_BASE = "https://api.mercadolibre.com"
 
 # =====================
 # Session State
@@ -44,7 +39,7 @@ st.session_state.setdefault("access_token", None)
 st.session_state.setdefault("results", [])
 
 # =====================
-# OAuth
+# OAuth helpers
 # =====================
 def get_auth_url():
     return (
@@ -52,7 +47,6 @@ def get_auth_url():
         f"?response_type=code"
         f"&client_id={CLIENT_ID}"
         f"&redirect_uri={REDIRECT_URI}"
-        f"&state=railway"
     )
 
 def exchange_code_for_token(code: str):
@@ -71,26 +65,30 @@ def exchange_code_for_token(code: str):
     return r.json().get("access_token")
 
 # =====================
-# API Mercado Libre
+# API MercadoLibre
 # =====================
 def get_categories():
-    url = f"https://api.mercadolibre.com/sites/{SITE_ID}/categories"
-    r = requests.get(url, timeout=10)
+    r = requests.get(f"{API_BASE}/sites/{SITE_ID}/categories", timeout=10)
     if r.status_code != 200:
         return []
     return r.json()
 
 def get_category_detail(category_id):
-    url = f"https://api.mercadolibre.com/categories/{category_id}"
-    r = requests.get(url, timeout=10)
+    r = requests.get(f"{API_BASE}/categories/{category_id}", timeout=10)
     if r.status_code != 200:
         return None
     return r.json()
 
-def get_highlights(token, category_id):
-    url = f"https://api.mercadolibre.com/highlights/{SITE_ID}/category/{category_id}"
+def get_highlights(token, category_id, brand_id=None):
+    url = f"{API_BASE}/highlights/{SITE_ID}/category/{category_id}"
+    params = {}
+
+    if brand_id:
+        params["attribute"] = "BRAND"
+        params["attributeValue"] = brand_id
+
     headers = {"Authorization": f"Bearer {token}"}
-    r = requests.get(url, headers=headers, timeout=10)
+    r = requests.get(url, headers=headers, params=params, timeout=10)
 
     if r.status_code == 404:
         return []
@@ -100,9 +98,21 @@ def get_highlights(token, category_id):
     return r.json().get("content", [])
 
 def get_item(token, item_id):
-    url = f"https://api.mercadolibre.com/items/{item_id}"
-    headers = {"Authorization": f"Bearer {token}"}
-    r = requests.get(url, headers=headers, timeout=10)
+    r = requests.get(
+        f"{API_BASE}/items/{item_id}",
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=10
+    )
+    if r.status_code != 200:
+        return None
+    return r.json()
+
+def get_product(token, product_id):
+    r = requests.get(
+        f"{API_BASE}/products/{product_id}",
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=10
+    )
     if r.status_code != 200:
         return None
     return r.json()
@@ -141,22 +151,24 @@ if not categories:
 
 cat_map = {c["name"]: c["id"] for c in categories}
 category_name = st.sidebar.selectbox("Categoría", sorted(cat_map.keys()))
-
 category_id = cat_map[category_name]
-category_detail = get_category_detail(category_id)
 
+category_detail = get_category_detail(category_id)
 subcat_id = category_id
+
 if category_detail and category_detail.get("children_categories"):
-    subcats = {
-        c["name"]: c["id"]
-        for c in category_detail["children_categories"]
-    }
+    subcats = {c["name"]: c["id"] for c in category_detail["children_categories"]}
     subcat_name = st.sidebar.selectbox(
         "Subcategoría (opcional)",
         ["Todas"] + list(subcats.keys())
     )
     if subcat_name != "Todas":
         subcat_id = subcats[subcat_name]
+
+brand_id = st.sidebar.text_input(
+    "Brand ID (opcional)",
+    help="Ej: 59387 (Samsung, Apple, etc.)"
+)
 
 limit = st.sidebar.slider("Cantidad", 5, 20, 10)
 
@@ -165,56 +177,41 @@ limit = st.sidebar.slider("Cantidad", 5, 20, 10)
 # =====================
 if st.sidebar.button("🔍 Buscar más vendidos"):
     with st.spinner("Consultando ranking..."):
-        highlights = get_highlights(token, subcat_id)
+        highlights = get_highlights(token, subcat_id, brand_id or None)
 
         if highlights is None:
-            st.error("❌ Error consultando Mercado Libre")
+            st.error("❌ Error consultando MercadoLibre")
             st.stop()
 
         if not highlights:
-            st.warning("Esta categoría no tiene ranking de más vendidos.")
+            st.warning("Esta categoría no tiene ranking disponible.")
             st.session_state["results"] = []
         else:
             rows = []
+
             for h in highlights[:limit]:
-                if h["type"] != "ITEM":
+                data = None
+
+                if h["type"] == "ITEM":
+                    data = get_item(token, h["id"])
+                    if not data:
+                        continue
+                    title = data["title"]
+                    price = data["price"]
+                    sold = data.get("sold_quantity")
+                    link = data["permalink"]
+
+                elif h["type"] == "PRODUCT":
+                    data = get_product(token, h["id"])
+                    if not data or not data.get("buy_box_winner"):
+                        continue
+                    title = data["name"]
+                    price = data["buy_box_winner"]["price"]
+                    sold = data.get("sold_quantity")
+                    link = data.get("permalink")
+
+                else:
                     continue
-                item = get_item(token, h["id"])
-                if not item:
-                    continue
+
                 rows.append({
                     "Posición": h["position"],
-                    "Título": item["title"],
-                    "Precio": item["price"],
-                    "Ventas": item.get("sold_quantity"),
-                    "Link": item["permalink"]
-                })
-
-            st.session_state["results"] = rows
-
-# =====================
-# Resultados
-# =====================
-if st.session_state["results"]:
-    df = pd.DataFrame(st.session_state["results"])
-    st.subheader("📊 Ranking de más vendidos")
-    st.dataframe(df, use_container_width=True)
-
-    st.plotly_chart(
-        px.bar(df, x="Título", y="Precio", title="Precio por producto"),
-        use_container_width=True
-    )
-
-    st.plotly_chart(
-        px.scatter(df, x="Precio", y="Ventas", hover_data=["Título"],
-                   title="Precio vs Ventas"),
-        use_container_width=True
-    )
-
-    csv = df.to_csv(index=False)
-    st.download_button(
-        "📥 Descargar CSV",
-        csv,
-        "mas_vendidos_ml.csv",
-        "text/csv"
-    )
