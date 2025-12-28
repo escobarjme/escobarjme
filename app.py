@@ -26,7 +26,7 @@ AUTH_URL = "https://auth.mercadolibre.com.ar/authorization"
 TOKEN_URL = f"{API_BASE}/oauth/token"
 
 CATEGORIES = {
-    "Televisores": "MLA1002",
+    "Repuestos Autos/Camionetas": "MLA1747",
     "Celulares": "MLA1055",
     "Notebooks": "MLA1652",
     "Zapatillas": "MLA109027",
