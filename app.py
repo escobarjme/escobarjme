@@ -35,12 +35,8 @@ CATEGORIES = {
 # =====================
 # SESSION STATE
 # =====================
-if "access_token" not in st.session_state:
-    st.session_state.access_token = None
-if "data" not in st.session_state:
-    st.session_state.data = []
-if "last_cat" not in st.session_state:
-    st.session_state.last_cat = None
+for key in ["access_token", "data", "last_cat"]:
+    st.session_state.setdefault(key, None if key == "access_token" else [])
 
 # =====================
 # API FUNCTIONS
@@ -69,58 +65,49 @@ def get_highlights(token, category_id):
 
 
 @st.cache_data(ttl=300)
-def get_any_detail(token, obj_id, obj_type):
+def get_item(token, item_id):
     headers = {"Authorization": f"Bearer {token}"}
+    r = requests.get(f"{API_BASE}/items/{item_id}", headers=headers, timeout=15)
+    return r.json() if r.status_code == 200 else None
 
-    # =====================
-    # PRODUCT (Catálogo)
-    # =====================
-    if obj_type == "PRODUCT":
-        r = requests.get(f"{API_BASE}/products/{obj_id}", headers=headers, timeout=15)
-        if r.status_code != 200:
-            return None
 
-        product = r.json()
-        items = product.get("items", [])
+@st.cache_data(ttl=300)
+def get_best_item_from_product(token, product_id):
+    headers = {"Authorization": f"Bearer {token}"}
+    r = requests.get(f"{API_BASE}/products/{product_id}", headers=headers, timeout=15)
+    if r.status_code != 200:
+        return None
 
-        if not items:
-            return {
-                "title": product.get("name"),
-                "price": None,
-                "sold_quantity": 0,
-                "permalink": f"https://www.mercadolibre.com.ar/p/{obj_id}"
-            }
+    product = r.json()
+    best_item = None
+    max_sold = -1
 
-        # Tomamos el primer item real
-        item_id = items[0]
+    for item_id in product.get("items", []):
+        item = get_item(token, item_id)
+        if not item:
+            continue
 
-        r_item = requests.get(f"{API_BASE}/items/{item_id}", headers=headers, timeout=15)
-        if r_item.status_code != 200:
-            return None
+        sold = item.get("sold_quantity", 0)
+        if sold > max_sold:
+            max_sold = sold
+            best_item = item
 
-        item = r_item.json()
+    if not best_item:
+        return None
 
-        return {
-            "title": item.get("title"),
-            "price": item.get("price"),
-            "sold_quantity": item.get("sold_quantity", 0),
-            "permalink": item.get("permalink")
-        }
+    brand = None
+    for attr in best_item.get("attributes", []):
+        if attr.get("id") == "BRAND":
+            brand = attr.get("value_name")
 
-    # =====================
-    # ITEM directo
-    # =====================
-    r_item = requests.get(f"{API_BASE}/items/{obj_id}", headers=headers, timeout=15)
-    if r_item.status_code == 200:
-        item = r_item.json()
-        return {
-            "title": item.get("title"),
-            "price": item.get("price"),
-            "sold_quantity": item.get("sold_quantity", 0),
-            "permalink": item.get("permalink")
-        }
+    return {
+        "title": best_item.get("title"),
+        "price": best_item.get("price"),
+        "sold_quantity": best_item.get("sold_quantity", 0),
+        "brand": brand,
+        "permalink": best_item.get("permalink"),
+    }
 
-    return None
 
 # =====================
 # UI
@@ -152,6 +139,11 @@ with st.sidebar:
     st.header("Filtros")
     cat_name = st.selectbox("Categoría", list(CATEGORIES.keys()))
     limit = st.slider("Cantidad", 5, 50, 20)
+
+    st.markdown("### 💰 Rango de precio")
+    min_price = st.number_input("Mínimo", value=0)
+    max_price = st.number_input("Máximo", value=10_000_000)
+
     buscar = st.button("🔍 Buscar")
 
 # =====================
@@ -160,22 +152,28 @@ with st.sidebar:
 if buscar:
     with st.spinner("Extrayendo datos..."):
         results = []
-        highlights = get_highlights(token, CATEGORIES[cat_name])
-        items = highlights[:limit]
+        highlights = get_highlights(token, CATEGORIES[cat_name])[:limit]
 
         progress = st.progress(0.0)
 
-        for i, h in enumerate(items):
-            detail = get_any_detail(token, h.get("id"), h.get("type"))
-            if detail:
-                results.append({
-                    "Posición": h.get("position", i + 1),
-                    "Título": detail["title"],
-                    "Precio": detail["price"],
-                    "Vendidos": detail["sold_quantity"],
-                    "Link": detail["permalink"]
-                })
-            progress.progress((i + 1) / len(items))
+        for i, h in enumerate(highlights):
+            if h.get("type") == "PRODUCT":
+                detail = get_best_item_from_product(token, h["id"])
+            else:
+                detail = get_item(token, h["id"])
+
+            if detail and detail.get("price") is not None:
+                if min_price <= detail["price"] <= max_price:
+                    results.append({
+                        "Posición": h.get("position", i + 1),
+                        "Título": detail["title"],
+                        "Marca": detail.get("brand"),
+                        "Precio": detail["price"],
+                        "Vendidos": detail["sold_quantity"],
+                        "Link": detail["permalink"]
+                    })
+
+            progress.progress((i + 1) / len(highlights))
 
         st.session_state.data = results
         st.session_state.last_cat = cat_name
@@ -185,9 +183,15 @@ if buscar:
 # RESULTS
 # =====================
 if st.session_state.data:
-    st.subheader(f"Resultados: {st.session_state.last_cat}")
-
     df = pd.DataFrame(st.session_state.data)
+
+    # Métricas
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Productos", len(df))
+    col2.metric("Precio promedio", f"$ {df['Precio'].mean():,.0f}")
+    col3.metric("Total vendidos", int(df["Vendidos"].sum()))
+
+    st.subheader(f"Resultados: {st.session_state.last_cat}")
 
     st.dataframe(
         df,
@@ -200,13 +204,25 @@ if st.session_state.data:
         hide_index=True
     )
 
-    csv = df.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        "⬇️ Descargar CSV",
-        csv,
-        "ranking_ml.csv",
-        "text/csv"
+    # =====================
+    # AGRUPADO POR MARCA
+    # =====================
+    st.subheader("🏷️ Ranking por Marca")
+    brand_df = (
+        df.groupby("Marca", dropna=False)
+        .agg(
+            Productos=("Título", "count"),
+            Vendidos=("Vendidos", "sum"),
+            Precio_Promedio=("Precio", "mean")
+        )
+        .sort_values("Vendidos", ascending=False)
+        .reset_index()
     )
+
+    st.dataframe(brand_df, use_container_width=True)
+
+    csv = df.to_csv(index=False).encode("utf-8")
+    st.download_button("⬇️ Descargar CSV", csv, "ranking_ml.csv", "text/csv")
 
     if st.button("Limpiar"):
         st.session_state.data = []
