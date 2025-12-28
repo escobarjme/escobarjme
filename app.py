@@ -27,7 +27,7 @@ TOKEN_URL = f"{API_BASE}/oauth/token"
 
 CATEGORIES = {
     "Repuestos Autos/Camionetas": "MLA5725",
-    "Motor": "MLA3172",
+    "Motor": "MLA73292",
     "Notebooks": "MLA1652",
     "Zapatillas": "MLA109027",
 }
