@@ -25,9 +25,11 @@ if not CLIENT_ID or not CLIENT_SECRET or not REDIRECT_URI:
 AUTH_URL = "https://auth.mercadolibre.com.ar/authorization"
 TOKEN_URL = f"{API_BASE}/oauth/token"
 
+# IDs Corregidos según tu consulta
 CATEGORIES = {
     "Accesorios para Vehículos": "MLA5725",
-    "epuestos Autos y Camionetas": "MLA22262",
+    "Repuestos Autos y Camionetas": "MLA1747", # Corregido a MLA1747
+    "Motor (Repuestos)": "MLA22262",
     "Notebooks": "MLA1652",
     "Zapatillas": "MLA109027",
 }
@@ -56,60 +58,53 @@ def exchange_code_for_token(code):
     r = requests.post(TOKEN_URL, data=payload, timeout=15)
     return r.json().get("access_token") if r.status_code == 200 else None
 
-
 @st.cache_data(ttl=300)
 def get_highlights(token, category_id):
     headers = {"Authorization": f"Bearer {token}"}
+    # Intentar primero con Highlights
     r = requests.get(
         f"{API_BASE}/highlights/{SITE_ID}/category/{category_id}",
         headers=headers,
         timeout=15
     )
-    return r.json().get("content", []) if r.status_code == 200 else []
-
+    
+    if r.status_code == 200:
+        return r.json().get("content", [])
+    
+    # FALLBACK: Si highlights falla, buscar por más vendidos (sort=sold_quantity_desc)
+    st.warning(f"Nota: Usando búsqueda por relevancia para esta subcategoría...")
+    r_search = requests.get(
+        f"{API_BASE}/sites/{SITE_ID}/search?category={category_id}&sort=sold_quantity_desc",
+        headers=headers,
+        timeout=15
+    )
+    if r_search.status_code == 200:
+        results = r_search.json().get("results", [])
+        # Adaptar formato de búsqueda al formato de highlights
+        return [{"id": x["id"], "type": "ITEM", "position": i+1} for i, x in enumerate(results)]
+    
+    return []
 
 @st.cache_data(ttl=300)
 def get_any_detail(token, obj_id, obj_type):
     headers = {"Authorization": f"Bearer {token}"}
 
-    # =====================
-    # PRODUCT (Catálogo)
-    # =====================
+    # Si es PRODUCT (Catálogo)
     if obj_type == "PRODUCT":
         r = requests.get(f"{API_BASE}/products/{obj_id}", headers=headers, timeout=15)
-        if r.status_code != 200:
-            return None
-
+        if r.status_code != 200: return None
         product = r.json()
         items = product.get("items", [])
-
         if not items:
             return {
                 "title": product.get("name"),
                 "price": None,
-                "sold_quantity": 0,
+                "sold_quantity": "N/A",
                 "permalink": f"https://www.mercadolibre.com.ar/p/{obj_id}"
             }
+        obj_id = items[0] # Usar el primer item del catálogo
 
-        # Tomamos el primer item real
-        item_id = items[0]
-
-        r_item = requests.get(f"{API_BASE}/items/{item_id}", headers=headers, timeout=15)
-        if r_item.status_code != 200:
-            return None
-
-        item = r_item.json()
-
-        return {
-            "title": item.get("title"),
-            "price": item.get("price"),
-            "sold_quantity": item.get("sold_quantity", 0),
-            "permalink": item.get("permalink")
-        }
-
-    # =====================
     # ITEM directo
-    # =====================
     r_item = requests.get(f"{API_BASE}/items/{obj_id}", headers=headers, timeout=15)
     if r_item.status_code == 200:
         item = r_item.json()
@@ -119,7 +114,6 @@ def get_any_detail(token, obj_id, obj_type):
             "sold_quantity": item.get("sold_quantity", 0),
             "permalink": item.get("permalink")
         }
-
     return None
 
 # =====================
@@ -127,7 +121,6 @@ def get_any_detail(token, obj_id, obj_type):
 # =====================
 st.title("🛒 MercadoLibre Argentina – Más Vendidos")
 
-# OAuth callback
 if "code" in st.query_params and not st.session_state.access_token:
     token = exchange_code_for_token(st.query_params["code"])
     if token:
@@ -135,7 +128,6 @@ if "code" in st.query_params and not st.session_state.access_token:
         st.query_params.clear()
         st.rerun()
 
-# Login
 if not st.session_state.access_token:
     st.link_button(
         "🔐 Login con MercadoLibre",
@@ -161,32 +153,34 @@ if buscar:
     with st.spinner("Extrayendo datos..."):
         results = []
         highlights = get_highlights(token, CATEGORIES[cat_name])
-        items = highlights[:limit]
+        
+        if not highlights:
+            st.error("No se encontraron datos para esta categoría.")
+        else:
+            items = highlights[:limit]
+            progress = st.progress(0.0)
 
-        progress = st.progress(0.0)
+            for i, h in enumerate(items):
+                detail = get_any_detail(token, h.get("id"), h.get("type"))
+                if detail:
+                    results.append({
+                        "Posición": h.get("position", i + 1),
+                        "Título": detail["title"],
+                        "Precio": detail["price"],
+                        "Vendidos": detail["sold_quantity"],
+                        "Link": detail["permalink"]
+                    })
+                progress.progress((i + 1) / len(items))
 
-        for i, h in enumerate(items):
-            detail = get_any_detail(token, h.get("id"), h.get("type"))
-            if detail:
-                results.append({
-                    "Posición": h.get("position", i + 1),
-                    "Título": detail["title"],
-                    "Precio": detail["price"],
-                    "Vendidos": detail["sold_quantity"],
-                    "Link": detail["permalink"]
-                })
-            progress.progress((i + 1) / len(items))
-
-        st.session_state.data = results
-        st.session_state.last_cat = cat_name
-        st.rerun()
+            st.session_state.data = results
+            st.session_state.last_cat = cat_name
+            st.rerun()
 
 # =====================
 # RESULTS
 # =====================
 if st.session_state.data:
     st.subheader(f"Resultados: {st.session_state.last_cat}")
-
     df = pd.DataFrame(st.session_state.data)
 
     st.dataframe(
@@ -201,12 +195,7 @@ if st.session_state.data:
     )
 
     csv = df.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        "⬇️ Descargar CSV",
-        csv,
-        "ranking_ml.csv",
-        "text/csv"
-    )
+    st.download_button("⬇️ Descargar CSV", csv, "ranking_ml.csv", "text/csv")
 
     if st.button("Limpiar"):
         st.session_state.data = []
