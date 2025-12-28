@@ -36,8 +36,12 @@ CATEGORIES = {
 # =====================
 # SESSION STATE
 # =====================
-for key in ["access_token", "data", "last_cat"]:
-    st.session_state.setdefault(key, None if key == "access_token" else [])
+if "access_token" not in st.session_state:
+    st.session_state.access_token = None
+if "data" not in st.session_state:
+    st.session_state.data = []
+if "last_cat" not in st.session_state:
+    st.session_state.last_cat = None
 
 # =====================
 # SAFE REQUEST
@@ -81,7 +85,7 @@ def get_best_item_from_product(token, product_id):
         return None
 
     product = r.json()
-    item_ids = product.get("items", [])[:5]  # 🔥 límite defensivo
+    item_ids = product.get("items", [])[:5]  # límite defensivo
 
     best_item = None
     max_sold = -1
@@ -98,7 +102,7 @@ def get_best_item_from_product(token, product_id):
             max_sold = sold
             best_item = item
 
-        if sold >= 50:  # ⚡ corte temprano
+        if sold >= 50:  # corte temprano
             break
 
     if not best_item:
@@ -146,7 +150,7 @@ token = st.session_state.access_token
 with st.sidebar:
     st.header("Filtros")
     cat_name = st.selectbox("Categoría", list(CATEGORIES.keys()))
-    limit = st.slider("Cantidad (recomendado ≤ 20)", 5, 30, 15)
+    limit = st.slider("Cantidad (≤ 20 recomendado)", 5, 30, 15)
 
     st.markdown("### 🚨 Alertas")
     min_sold_alert = st.number_input("Mínimo vendidos", value=50)
@@ -165,10 +169,29 @@ if buscar:
         progress = st.progress(0.0)
 
         for i, h in enumerate(highlights):
+            detail = None
+            headers = {"Authorization": f"Bearer {token}"}
+
             if h.get("type") == "PRODUCT":
                 detail = get_best_item_from_product(token, h["id"])
-            else:
-                continue
+
+            elif h.get("type") == "ITEM":
+                r_item = safe_get(f"{API_BASE}/items/{h['id']}", headers)
+                if r_item and r_item.status_code == 200:
+                    item = r_item.json()
+
+                    brand = None
+                    for attr in item.get("attributes", []):
+                        if attr.get("id") == "BRAND":
+                            brand = attr.get("value_name")
+
+                    detail = {
+                        "title": item.get("title"),
+                        "price": item.get("price"),
+                        "sold_quantity": item.get("sold_quantity", 0),
+                        "brand": brand,
+                        "permalink": item.get("permalink"),
+                    }
 
             if detail and detail.get("price") is not None:
                 results.append({
@@ -192,7 +215,6 @@ if buscar:
 if st.session_state.data:
     df = pd.DataFrame(st.session_state.data)
 
-    # Métricas
     col1, col2, col3 = st.columns(3)
     col1.metric("Productos", len(df))
     col2.metric("Precio promedio", f"$ {df['Precio'].mean():,.0f}")
