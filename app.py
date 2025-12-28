@@ -1,12 +1,18 @@
 import os
 import requests
 import streamlit as st
-import pd
+import pandas as pd  # <--- Corregido aquí
 
-# CONFIG
-st.set_page_config(page_title="ML Ranking Argentina", layout="wide")
+# =====================
+# CONFIG STREAMLIT
+# =====================
+st.set_page_config(
+    page_title="ML Ranking Argentina", 
+    layout="wide",
+    page_icon="🛒"
+)
 
-# IDs de Categorías (Verificados)
+# IDs de Categorías verificados para Argentina (MLA)
 CATEGORIES = {
     "Accesorios para Vehículos": "MLA5725",
     "Repuestos Autos y Camionetas": "MLA1747",
@@ -16,18 +22,17 @@ CATEGORIES = {
 }
 
 def fetch_ranking(cat_id, limit):
+    # Endpoint de búsqueda filtrado por categoría y ordenado por cantidad de ventas
     url = f"https://api.mercadolibre.com/sites/MLA/search?category={cat_id}&sort=sold_quantity_desc&limit={limit}"
     
-    # HEADERS PARA ENGAÑAR AL FILTRO 403
+    # Headers para simular una petición de navegador y evitar bloqueos
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "application/json",
-        "Accept-Language": "es-AR,es;q=0.9",
-        "Connection": "keep-alive"
     }
     
     try:
-        # Petición SIN TOKEN (más segura para evitar el 403 de permisos)
+        # Petición pública (sin token para evitar el error 403 de permisos)
         response = requests.get(url, headers=headers, timeout=15)
         
         if response.status_code == 200:
@@ -38,7 +43,7 @@ def fetch_ranking(cat_id, limit):
                     "Pos.": i + 1,
                     "Título": item.get("title"),
                     "Precio": item.get("price"),
-                    "Ventas (Ranking)": "Top Vendido",
+                    "Condición": item.get("condition"),
                     "Link": item.get("permalink")
                 })
             return data
@@ -49,17 +54,53 @@ def fetch_ranking(cat_id, limit):
         st.error(f"Error de conexión: {e}")
         return None
 
-# INTERFAZ SIMPLE
-st.title("🛒 Ranking de Ventas ML")
-st.info("Esta versión utiliza acceso público para evitar bloqueos 403.")
+# =====================
+# INTERFAZ DE USUARIO
+# =====================
+st.title("🛒 Ranking de Ventas Mercado Libre")
+st.markdown("""
+Esta herramienta obtiene los productos **más vendidos** de una categoría utilizando la API pública de Mercado Libre. 
+Ideal para análisis de mercado en tiempo real.
+""")
 
 with st.sidebar:
-    opcion = st.selectbox("Categoría", list(CATEGORIES.keys()))
-    cantidad = st.slider("Cantidad", 10, 50, 20)
-    boton = st.button("🚀 Buscar")
+    st.header("Configuración")
+    opcion = st.selectbox("Selecciona una Categoría", list(CATEGORIES.keys()))
+    cantidad = st.slider("Cantidad de productos", 10, 50, 20)
+    st.divider()
+    boton = st.button("🚀 Obtener Ranking")
 
 if boton:
-    res = fetch_ranking(CATEGORIES[opcion], cantidad)
-    if res:
-        df = pd.DataFrame(res)
-        st.dataframe(df, use_container_width=True, hide_index=True)
+    with st.spinner(f"Consultando los más vendidos de {opcion}..."):
+        res = fetch_ranking(CATEGORIES[opcion], cantidad)
+        
+        if res:
+            df = pd.DataFrame(res)
+            
+            # Formatear la tabla
+            st.subheader(f"Top {len(df)}: {opcion}")
+            
+            st.dataframe(
+                df, 
+                column_config={
+                    "Precio": st.column_config.NumberColumn("Precio ($)", format="$ %.2f"),
+                    "Link": st.column_config.LinkColumn("Ver Producto")
+                },
+                use_container_width=True, 
+                hide_index=True
+            )
+            
+            # Botón de descarga
+            csv = df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="⬇️ Descargar Ranking en CSV",
+                data=csv,
+                file_name=f"ranking_{opcion.lower().replace(' ', '_')}.csv",
+                mime="text/csv",
+            )
+        else:
+            st.warning("No se pudieron obtener datos. Intenta de nuevo en unos segundos.")
+
+# Pie de página
+st.divider()
+st.caption("Desarrollado para análisis de datos de Mercado Libre Argentina.")
