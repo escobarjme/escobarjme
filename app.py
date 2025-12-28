@@ -2,7 +2,6 @@ import os
 import requests
 import streamlit as st
 import pandas as pd
-import numpy as np
 
 # =====================
 # CONFIG STREAMLIT
@@ -44,17 +43,6 @@ if "last_cat" not in st.session_state:
     st.session_state.last_cat = None
 
 # =====================
-# SAFE REQUEST
-# =====================
-def safe_get(url, headers, timeout=8, retries=2):
-    for _ in range(retries):
-        try:
-            return requests.get(url, headers=headers, timeout=timeout)
-        except requests.exceptions.ReadTimeout:
-            continue
-    return None
-
-# =====================
 # API FUNCTIONS
 # =====================
 def exchange_code_for_token(code):
@@ -65,61 +53,74 @@ def exchange_code_for_token(code):
         "code": code,
         "redirect_uri": REDIRECT_URI,
     }
-    r = requests.post(TOKEN_URL, data=payload, timeout=10)
+    r = requests.post(TOKEN_URL, data=payload, timeout=15)
     return r.json().get("access_token") if r.status_code == 200 else None
 
 
 @st.cache_data(ttl=300)
 def get_highlights(token, category_id):
     headers = {"Authorization": f"Bearer {token}"}
-    r = safe_get(f"{API_BASE}/highlights/{SITE_ID}/category/{category_id}", headers)
-    return r.json().get("content", []) if r and r.status_code == 200 else []
+    r = requests.get(
+        f"{API_BASE}/highlights/{SITE_ID}/category/{category_id}",
+        headers=headers,
+        timeout=15
+    )
+    return r.json().get("content", []) if r.status_code == 200 else []
 
 
 @st.cache_data(ttl=300)
-def get_best_item_from_product(token, product_id):
+def get_any_detail(token, obj_id, obj_type):
     headers = {"Authorization": f"Bearer {token}"}
 
-    r = safe_get(f"{API_BASE}/products/{product_id}", headers)
-    if not r or r.status_code != 200:
-        return None
+    # =====================
+    # PRODUCT (Catálogo)
+    # =====================
+    if obj_type == "PRODUCT":
+        r = requests.get(f"{API_BASE}/products/{obj_id}", headers=headers, timeout=15)
+        if r.status_code != 200:
+            return None
 
-    product = r.json()
-    item_ids = product.get("items", [])[:5]  # límite defensivo
+        product = r.json()
+        items = product.get("items", [])
 
-    best_item = None
-    max_sold = -1
+        if not items:
+            return {
+                "title": product.get("name"),
+                "price": None,
+                "sold_quantity": 0,
+                "permalink": f"https://www.mercadolibre.com.ar/p/{obj_id}"
+            }
 
-    for item_id in item_ids:
-        r_item = safe_get(f"{API_BASE}/items/{item_id}", headers)
-        if not r_item or r_item.status_code != 200:
-            continue
+        # Tomamos el primer item real
+        item_id = items[0]
+
+        r_item = requests.get(f"{API_BASE}/items/{item_id}", headers=headers, timeout=15)
+        if r_item.status_code != 200:
+            return None
 
         item = r_item.json()
-        sold = item.get("sold_quantity", 0)
 
-        if sold > max_sold:
-            max_sold = sold
-            best_item = item
+        return {
+            "title": item.get("title"),
+            "price": item.get("price"),
+            "sold_quantity": item.get("sold_quantity", 0),
+            "permalink": item.get("permalink")
+        }
 
-        if sold >= 50:  # corte temprano
-            break
+    # =====================
+    # ITEM directo
+    # =====================
+    r_item = requests.get(f"{API_BASE}/items/{obj_id}", headers=headers, timeout=15)
+    if r_item.status_code == 200:
+        item = r_item.json()
+        return {
+            "title": item.get("title"),
+            "price": item.get("price"),
+            "sold_quantity": item.get("sold_quantity", 0),
+            "permalink": item.get("permalink")
+        }
 
-    if not best_item:
-        return None
-
-    brand = None
-    for attr in best_item.get("attributes", []):
-        if attr.get("id") == "BRAND":
-            brand = attr.get("value_name")
-
-    return {
-        "title": best_item.get("title"),
-        "price": best_item.get("price"),
-        "sold_quantity": best_item.get("sold_quantity", 0),
-        "brand": brand,
-        "permalink": best_item.get("permalink"),
-    }
+    return None
 
 # =====================
 # UI
@@ -150,12 +151,7 @@ token = st.session_state.access_token
 with st.sidebar:
     st.header("Filtros")
     cat_name = st.selectbox("Categoría", list(CATEGORIES.keys()))
-    limit = st.slider("Cantidad (≤ 20 recomendado)", 5, 30, 15)
-
-    st.markdown("### 🚨 Alertas")
-    min_sold_alert = st.number_input("Mínimo vendidos", value=50)
-    price_percentile = st.slider("Percentil precio bajo", 5, 50, 25)
-
+    limit = st.slider("Cantidad", 5, 50, 20)
     buscar = st.button("🔍 Buscar")
 
 # =====================
@@ -164,46 +160,22 @@ with st.sidebar:
 if buscar:
     with st.spinner("Extrayendo datos..."):
         results = []
-        highlights = get_highlights(token, CATEGORIES[cat_name])[:limit]
+        highlights = get_highlights(token, CATEGORIES[cat_name])
+        items = highlights[:limit]
 
         progress = st.progress(0.0)
 
-        for i, h in enumerate(highlights):
-            detail = None
-            headers = {"Authorization": f"Bearer {token}"}
-
-            if h.get("type") == "PRODUCT":
-                detail = get_best_item_from_product(token, h["id"])
-
-            elif h.get("type") == "ITEM":
-                r_item = safe_get(f"{API_BASE}/items/{h['id']}", headers)
-                if r_item and r_item.status_code == 200:
-                    item = r_item.json()
-
-                    brand = None
-                    for attr in item.get("attributes", []):
-                        if attr.get("id") == "BRAND":
-                            brand = attr.get("value_name")
-
-                    detail = {
-                        "title": item.get("title"),
-                        "price": item.get("price"),
-                        "sold_quantity": item.get("sold_quantity", 0),
-                        "brand": brand,
-                        "permalink": item.get("permalink"),
-                    }
-
-            if detail and detail.get("price") is not None:
+        for i, h in enumerate(items):
+            detail = get_any_detail(token, h.get("id"), h.get("type"))
+            if detail:
                 results.append({
                     "Posición": h.get("position", i + 1),
                     "Título": detail["title"],
-                    "Marca": detail.get("brand"),
                     "Precio": detail["price"],
                     "Vendidos": detail["sold_quantity"],
                     "Link": detail["permalink"]
                 })
-
-            progress.progress((i + 1) / len(highlights))
+            progress.progress((i + 1) / len(items))
 
         st.session_state.data = results
         st.session_state.last_cat = cat_name
@@ -213,14 +185,9 @@ if buscar:
 # RESULTS
 # =====================
 if st.session_state.data:
-    df = pd.DataFrame(st.session_state.data)
-
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Productos", len(df))
-    col2.metric("Precio promedio", f"$ {df['Precio'].mean():,.0f}")
-    col3.metric("Total vendidos", int(df["Vendidos"].sum()))
-
     st.subheader(f"Resultados: {st.session_state.last_cat}")
+
+    df = pd.DataFrame(st.session_state.data)
 
     st.dataframe(
         df,
@@ -233,25 +200,13 @@ if st.session_state.data:
         hide_index=True
     )
 
-    # =====================
-    # ALERTAS
-    # =====================
-    st.subheader("🚨 Alertas: muchas ventas + precio bajo")
-
-    price_threshold = np.percentile(df["Precio"], price_percentile)
-
-    alerts_df = df[
-        (df["Vendidos"] >= min_sold_alert) &
-        (df["Precio"] <= price_threshold)
-    ].sort_values("Vendidos", ascending=False)
-
-    if alerts_df.empty:
-        st.info("No se detectaron oportunidades con los criterios actuales.")
-    else:
-        st.dataframe(alerts_df, use_container_width=True)
-
     csv = df.to_csv(index=False).encode("utf-8")
-    st.download_button("⬇️ Descargar CSV", csv, "ranking_ml.csv", "text/csv")
+    st.download_button(
+        "⬇️ Descargar CSV",
+        csv,
+        "ranking_ml.csv",
+        "text/csv"
+    )
 
     if st.button("Limpiar"):
         st.session_state.data = []
