@@ -29,9 +29,9 @@ TOKEN_URL = f"{API_BASE}/oauth/token"
 CATEGORIES = {
     "Accesorios para Vehículos (Gral)": "MLA5725",
     "Repuestos Autos y Camionetas": "MLA3483",
-    "Baterías": "MLA403348",
+    "Baterías": "MLA2220",
     "Neumáticos": "MLA22195",
-    "Aceites para Motor": "MLA373901",
+    "Lubricantes y Fluidos": "MLA456111",
     "Notebooks": "MLA1652",
     "Zapatillas": "MLA109027",
 }
