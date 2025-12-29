@@ -28,7 +28,7 @@ TOKEN_URL = f"{API_BASE}/oauth/token"
 # IDs Corregidos según tu consulta
 CATEGORIES = {
     "Accesorios para Vehículos": "MLA5725",
-    "Repuestos Autos y Camionetas": "MLA1747", # Corregido a MLA1747
+    "Repuestos Autos y Camionetas": "MLA3483", # Corregido a MLA1747
     "Motor (Repuestos)": "MLA22262",
     "Notebooks": "MLA1652",
     "Zapatillas": "MLA109027",
